@@ -1,0 +1,56 @@
+name: tide-final-grading-dev
+
+services:
+  db:
+    extends:
+      file: compose.base.yml
+      service: db
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
+
+  backend:
+    extends:
+      file: compose.base.yml
+      service: backend
+    build:
+      target: development
+    environment:
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT}:3000"
+
+  agent:
+    extends:
+      file: compose.base.yml
+      service: agent
+    build:
+      target: development
+    ports:
+      - "127.0.0.1:${AGENT_PORT}:8000"
+
+  frontend:
+    extends:
+      file: compose.base.yml
+      service: frontend
+    build:
+      target: development
+    environment:
+      VITE_API_URL: http://localhost:${BACKEND_PORT}
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT}:5173"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:5173').then(response => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  postgres_data:

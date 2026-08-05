@@ -1,0 +1,64 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: Secrets, dependencies and configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out complete history
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install checksum-pinned Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output /tmp/gitleaks.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" | sha256sum --check
+          tar --extract --gzip --file /tmp/gitleaks.tar.gz --directory /tmp gitleaks
+
+      - name: Scan complete Git history for secrets
+        shell: bash
+        run: /tmp/gitleaks git --redact --no-banner --log-opts="--all"
+
+      - name: Install checksum-pinned Trivy
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_Linux-64bit.tar.gz \
+            --output /tmp/trivy.tar.gz
+          echo "8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9  /tmp/trivy.tar.gz" | sha256sum --check
+          tar --extract --gzip --file /tmp/trivy.tar.gz --directory /tmp trivy
+
+      - name: Scan dependencies, secrets and deployment configuration
+        shell: bash
+        env:
+          TRIVY_DISABLE_VEX_NOTICE: "true"
+        run: >-
+          /tmp/trivy fs
+          --scanners vuln,secret,misconfig
+          --severity HIGH,CRITICAL
+          --ignore-unfixed
+          --exit-code 1
+          .

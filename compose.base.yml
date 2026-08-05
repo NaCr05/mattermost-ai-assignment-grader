@@ -1,0 +1,91 @@
+services:
+  db:
+    image: postgres:15
+    user: postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      AUTH_SECRET: ${AUTH_SECRET}
+      BOOTSTRAP_TOKEN: ${BOOTSTRAP_TOKEN}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      AUTH_RATE_LIMIT_WINDOW_SECONDS: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:-900}
+      AUTH_LOGIN_IP_LIMIT: ${AUTH_LOGIN_IP_LIMIT:-30}
+      AUTH_LOGIN_ACCOUNT_LIMIT: ${AUTH_LOGIN_ACCOUNT_LIMIT:-8}
+      AUTH_BOOTSTRAP_IP_LIMIT: ${AUTH_BOOTSTRAP_IP_LIMIT:-5}
+      AGENT_URL: http://agent:8000
+      MATTERMOST_SLASH_TOKEN: ${MATTERMOST_SLASH_TOKEN:-}
+      MATTERMOST_TEACHER_USERNAME: ${MATTERMOST_TEACHER_USERNAME:-}
+      MATTERMOST_ACTION_URL: ${MATTERMOST_ACTION_URL:-}
+      LOG_HEALTH_REQUESTS: ${LOG_HEALTH_REQUESTS:-false}
+      LOG_ERROR_DETAILS: ${LOG_ERROR_DETAILS:-false}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/health').then(response => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    depends_on:
+      db:
+        condition: service_healthy
+      agent:
+        condition: service_healthy
+
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    environment:
+      AGENT_MODE: ${AGENT_MODE:-mock}
+      ENABLE_PASCAL_EXECUTION: ${ENABLE_PASCAL_EXECUTION:-false}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-pro}
+      DEEPSEEK_TIMEOUT_SECONDS: ${DEEPSEEK_TIMEOUT_SECONDS:-60}
+      DEEPSEEK_INPUT_COST_PER_MILLION_USD: ${DEEPSEEK_INPUT_COST_PER_MILLION_USD:-0}
+      DEEPSEEK_OUTPUT_COST_PER_MILLION_USD: ${DEEPSEEK_OUTPUT_COST_PER_MILLION_USD:-0}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy

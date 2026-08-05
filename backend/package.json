@@ -1,0 +1,42 @@
+{
+  "name": "tide-grading-backend",
+  "version": "1.0.0",
+  "description": "Backend for the Mattermost AI-assisted assignment grading platform",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsup src/index.ts --format esm --platform node --target node24 --out-dir dist --sourcemap --clean --no-splitting",
+    "start": "node dist/index.js",
+    "test": "npm run test:unit",
+    "test:unit": "tsx --test tests/auth.test.ts tests/auth-rate-limit.test.ts tests/grading-contracts.test.ts tests/grading-dto.test.ts",
+    "test:api": "tsx --test tests/api.test.ts tests/grading-state.test.ts",
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:seed": "prisma db seed"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "pg": "^8.22.0",
+    "prisma": "^7.9.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.1.1",
+    "@types/pg": "^8.20.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.0",
+    "typescript": "^7.0.2"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1"
+  }
+}
