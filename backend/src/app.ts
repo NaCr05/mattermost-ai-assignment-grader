@@ -8,6 +8,10 @@ import {
 } from "./auth/rate-limit";
 import { createSessionService } from "./auth/session";
 import { createGradingModule } from "./grading/module";
+import {
+  createReadinessProbe,
+  type ReadinessProbe,
+} from "./health/readiness";
 import { createAssignmentsRouter } from "./http/assignments-routes";
 import { createEvaluationsRouter } from "./http/evaluations-routes";
 import { isNonEmptyString, sendServerError } from "./http/error-mapping";
@@ -24,6 +28,7 @@ type AppDependencies = {
   bootstrapToken?: string;
   authRateLimiters?: AuthRateLimiters;
   trustProxy?: boolean | number | string;
+  readiness?: ReadinessProbe;
 };
 
 function parseTrustProxy(value: string | undefined): boolean | number | string {
@@ -36,6 +41,9 @@ function parseTrustProxy(value: string | undefined): boolean | number | string {
 export function createApp(dependencies: AppDependencies = {}) {
   const database = dependencies.database ?? defaultPrisma;
   const grading = dependencies.grading ?? createGradingModule({ database });
+  const readiness = dependencies.readiness ?? createReadinessProbe({
+    checkDatabase: () => database.$queryRaw`SELECT 1`,
+  });
   const sessions = createSessionService({
     secret: dependencies.authSecret ?? process.env.AUTH_SECRET,
     secure:
@@ -68,7 +76,7 @@ export function createApp(dependencies: AppDependencies = {}) {
     response.setHeader("x-request-id", requestId);
     response.on("finish", () => {
       const shouldLogHealth = process.env.LOG_HEALTH_REQUESTS?.toLowerCase() === "true";
-      if ((requestPath === "/health" || requestPath === "/metrics") && !shouldLogHealth) return;
+      if (["/health", "/readyz", "/metrics"].includes(requestPath) && !shouldLogHealth) return;
       logInfo("http.request.completed", {
         requestId,
         method: request.method,
@@ -92,6 +100,11 @@ export function createApp(dependencies: AppDependencies = {}) {
     } catch (error) {
       sendServerError(response, "Database health check failed", error);
     }
+  });
+
+  app.get("/readyz", async (_request, response) => {
+    const result = await readiness.check();
+    response.status(result.status === "ready" ? 200 : 503).json(result);
   });
 
   app.use("/auth", auth.router);

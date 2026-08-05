@@ -11,7 +11,7 @@
     "build": "tsup src/index.ts --format esm --platform node --target node24 --out-dir dist --sourcemap --clean --no-splitting",
     "start": "node dist/index.js",
     "test": "npm run test:unit",
-    "test:unit": "tsx --test tests/auth.test.ts tests/auth-rate-limit.test.ts tests/grading-contracts.test.ts tests/grading-dto.test.ts",
+    "test:unit": "tsx --test tests/auth.test.ts tests/auth-rate-limit.test.ts tests/grading-contracts.test.ts tests/grading-dto.test.ts tests/readiness.test.ts",
     "test:api": "tsx --test tests/api.test.ts tests/grading-state.test.ts",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",

@@ -20,6 +20,14 @@ const evaluation = {
   status: "generated",
   agentRawOutput: "private model output",
   errorMessage: "private provider error",
+  agentProvider: "deepseek",
+  modelName: "private-model-name",
+  promptVersion: "private-prompt-version",
+  inputTokens: 100,
+  outputTokens: 50,
+  totalTokens: 150,
+  agentDurationMs: 12.5,
+  estimatedCostUsd: 0.01,
   version: 1,
   reviewedById: null,
   reviewedAt: null,
@@ -33,6 +41,18 @@ test("evaluation DTO exposes review data without internal model output", () => {
   assert.equal(dto.score, evaluation.score);
   assert.equal("agentRawOutput" in dto, false);
   assert.equal("errorMessage" in dto, false);
+  for (const privateField of [
+    "agentProvider",
+    "modelName",
+    "promptVersion",
+    "inputTokens",
+    "outputTokens",
+    "totalTokens",
+    "agentDurationMs",
+    "estimatedCostUsd",
+  ]) {
+    assert.equal(privateField in dto, false);
+  }
 });
 
 test("submission and audit DTOs redact nested model output", () => {
@@ -55,4 +75,5 @@ test("submission and audit DTOs redact nested model output", () => {
   assert.doesNotMatch(serialized, /private provider error/);
   assert.doesNotMatch(serialized, /private audit output/);
   assert.doesNotMatch(serialized, /private nested output/);
+  assert.doesNotMatch(serialized, /private-model-name|private-prompt-version/);
 });

@@ -65,7 +65,21 @@ function redactSnapshot(value: unknown): unknown {
 
   const redacted: Record<string, unknown> = {};
   for (const [key, nestedValue] of Object.entries(value)) {
-    if (key === "agentRawOutput" || key === "errorMessage" || key === "raw_output") {
+    if ([
+      "agentRawOutput",
+      "errorMessage",
+      "raw_output",
+      "agentProvider",
+      "agentRequestId",
+      "agentAttempts",
+      "modelName",
+      "promptVersion",
+      "agentDurationMs",
+      "inputTokens",
+      "outputTokens",
+      "totalTokens",
+      "estimatedCostUsd",
+    ].includes(key)) {
       continue;
     }
     redacted[key] = redactSnapshot(nestedValue);

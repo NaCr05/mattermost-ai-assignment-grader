@@ -22,11 +22,11 @@ export function createMattermostRouter(input: {
 
   async function findUser(mattermostUserId: string, username: string) {
     let user = await input.database.user.findFirst({
-      where: { OR: [{ mattermostUserId }, { username }] },
+      where: { disabledAt: null, OR: [{ mattermostUserId }, { username }] },
     });
     if (!user && username === input.teacherUsername) {
       user = await input.database.user.findFirst({
-        where: { role: "teacher", passwordHash: { not: null } },
+        where: { role: "teacher", passwordHash: { not: null }, disabledAt: null },
         orderBy: { createdAt: "asc" },
       });
     }

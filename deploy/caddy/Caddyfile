@@ -1,0 +1,22 @@
+{
+	admin off
+	http_port 8080
+	https_port 8443
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+	reverse_proxy frontend:8080
+}
+
+# Container-local health path: this avoids depending on the public domain Host
+# header while still proving that Caddy can reach the static frontend.
+http://:8081 {
+	reverse_proxy frontend:8080
+}

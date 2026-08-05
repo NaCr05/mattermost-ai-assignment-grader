@@ -1,0 +1,101 @@
+name: Live model evaluation
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_paid_requests:
+        description: I authorize paid requests to the configured live model
+        required: true
+        type: boolean
+        default: false
+      min_pass_rate:
+        description: Minimum synthetic-case pass rate
+        required: true
+        type: string
+        default: "0.80"
+      max_total_cost_usd:
+        description: Maximum estimated total cost in USD
+        required: true
+        type: string
+        default: "1.00"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-model-evaluation
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    name: Paid synthetic model evaluation
+    if: ${{ inputs.confirm_paid_requests }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: live-model-evaluation
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: agent/requirements.txt
+
+      - name: Validate live-model secret
+        shell: bash
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: test -n "$DEEPSEEK_API_KEY"
+
+      - name: Install Agent runtime
+        run: python -m pip install --requirement agent/requirements.txt
+
+      - name: Start live Agent
+        shell: bash
+        working-directory: agent
+        env:
+          AGENT_MODE: live
+          ENABLE_PASCAL_EXECUTION: "false"
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_BASE_URL: ${{ vars.DEEPSEEK_BASE_URL }}
+          DEEPSEEK_MODEL: ${{ vars.DEEPSEEK_MODEL }}
+          DEEPSEEK_INPUT_COST_PER_MILLION_USD: ${{ vars.DEEPSEEK_INPUT_COST_PER_MILLION_USD }}
+          DEEPSEEK_OUTPUT_COST_PER_MILLION_USD: ${{ vars.DEEPSEEK_OUTPUT_COST_PER_MILLION_USD }}
+        run: |
+          set -euo pipefail
+          export DEEPSEEK_BASE_URL="${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"
+          export DEEPSEEK_MODEL="${DEEPSEEK_MODEL:-deepseek-v4-pro}"
+          nohup python -m uvicorn main:app --host 127.0.0.1 --port 8000 >/tmp/tide-live-agent.log 2>&1 &
+          echo "$!" >/tmp/tide-live-agent.pid
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          sed -n '1,120p' /tmp/tide-live-agent.log
+          exit 1
+
+      - name: Run anonymous synthetic evaluation
+        env:
+          ALLOW_PAID_LIVE_EVALUATION: "true"
+          AGENT_URL: http://127.0.0.1:8000
+          LIVE_EVAL_MIN_PASS_RATE: ${{ inputs.min_pass_rate }}
+          LIVE_EVAL_MAX_TOTAL_COST_USD: ${{ inputs.max_total_cost_usd }}
+          LIVE_EVAL_MAX_P95_LATENCY_MS: "90000"
+          LIVE_EVAL_SUMMARY_PATH: live-eval-summary.json
+        run: python tests/run_live_model_evaluation.py
+
+      - name: Upload redacted evaluation summary
+        if: ${{ always() && hashFiles('live-eval-summary.json') != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: live-model-evaluation-summary
+          path: live-eval-summary.json
+          if-no-files-found: error
+          retention-days: 30

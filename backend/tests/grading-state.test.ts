@@ -15,6 +15,18 @@ const result: EvaluationAgentResult = {
   provider: "mock",
   attempts: 1,
   raw_output: "private raw output",
+  observability: {
+    requestId: "state-agent-request",
+    modelName: "test-model-v1",
+    promptVersion: "test-prompt-v1",
+    durationMs: 12.5,
+    usage: {
+      inputTokens: 100,
+      outputTokens: 40,
+      totalTokens: 140,
+      estimatedCostUsd: 0.0012,
+    },
+  },
 };
 
 test("Grading Module preserves failure and concurrency invariants", async (suite) => {
@@ -55,6 +67,27 @@ test("Grading Module preserves failure and concurrency invariants", async (suite
       });
       assert.equal(saved.status, "failed");
       assert.equal(saved.evaluation, null);
+    });
+
+    await suite.test("successful evaluation persists reproducibility metadata", async () => {
+      const record = await submission("observability persistence");
+      const grading = createGradingModule({
+        database: prisma,
+        evaluationAgent: createFakeEvaluationAgent(result),
+      });
+      const generated = await grading.evaluateSubmission({ submissionId: record.id });
+      assert.ok(generated);
+      const saved = await prisma.evaluation.findUniqueOrThrow({ where: { id: generated.evaluation.id } });
+      assert.equal(saved.agentProvider, "mock");
+      assert.equal(saved.agentRequestId, "state-agent-request");
+      assert.equal(saved.agentAttempts, 1);
+      assert.equal(saved.modelName, "test-model-v1");
+      assert.equal(saved.promptVersion, "test-prompt-v1");
+      assert.equal(saved.agentDurationMs, 12.5);
+      assert.equal(saved.inputTokens, 100);
+      assert.equal(saved.outputTokens, 40);
+      assert.equal(saved.totalTokens, 140);
+      assert.equal(saved.estimatedCostUsd?.toString(), "0.0012");
     });
 
     await suite.test("regrade failure marks both Submission and Evaluation failed", async () => {

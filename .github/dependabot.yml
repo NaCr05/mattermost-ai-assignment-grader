@@ -28,14 +28,27 @@ updates:
     directory: /backend
     schedule:
       interval: weekly
+    ignore:
+      # Production images stay on the current LTS line. Review the next LTS
+      # upgrade explicitly instead of following short-lived Current releases.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directory: /frontend
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directory: /agent
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /deploy/caddy
     schedule:
       interval: weekly
 

@@ -33,7 +33,8 @@ test("TIDE grading API authenticated workflow", async (suite) => {
   const teacherPassword = "test-teacher-password-123";
   const studentPassword = "test-student-password-123";
   const otherTeacherPassword = "test-other-teacher-password-123";
-  const [teacher, student, otherTeacher, revocationUser] = await Promise.all([
+  const lifecyclePassword = "test-lifecycle-password-123";
+  const [teacher, student, otherTeacher, revocationUser, lifecycleUser] = await Promise.all([
     prisma.user.create({
       data: {
         username: `teacher-${uniqueSuffix}`,
@@ -64,6 +65,14 @@ test("TIDE grading API authenticated workflow", async (suite) => {
         displayName: "Session Revocation User",
         role: "student",
         passwordHash: await hashPassword(studentPassword),
+      },
+    }),
+    prisma.user.create({
+      data: {
+        username: `lifecycle-${uniqueSuffix}`,
+        displayName: "Account Lifecycle User",
+        role: "student",
+        passwordHash: await hashPassword(lifecyclePassword),
       },
     }),
   ]);
@@ -106,6 +115,7 @@ test("TIDE grading API authenticated workflow", async (suite) => {
   const studentSession = await login(student.username, studentPassword);
   const otherTeacherSession = await login(otherTeacher.username, otherTeacherPassword);
   const revocationSession = await login(revocationUser.username, studentPassword);
+  const lifecycleSession = await login(lifecycleUser.username, lifecyclePassword);
 
   try {
     await suite.test("health and session endpoints report configured authentication", async () => {
@@ -113,6 +123,13 @@ test("TIDE grading API authenticated workflow", async (suite) => {
       assert.equal(health.response.status, 200);
       assert.equal(health.body.authentication, "configured");
       assert.ok(health.response.headers.get("x-request-id"));
+      const readiness = await request("/readyz");
+      assert.equal(readiness.response.status, 200);
+      assert.deepEqual(readiness.body, {
+        status: "ready",
+        database: "connected",
+        agent: "connected",
+      });
       const me = await request("/auth/me", {}, teacherSession);
       assert.equal(me.response.status, 200);
       assert.equal(me.body.user.id, teacher.id);
@@ -222,6 +239,7 @@ test("TIDE grading API authenticated workflow", async (suite) => {
         assert.equal(result.response.status, 200);
         const serialized = JSON.stringify(result.body);
         assert.doesNotMatch(serialized, /agentRawOutput|errorMessage|raw_output/);
+        assert.doesNotMatch(serialized, /modelName|promptVersion|inputTokens|estimatedCostUsd/);
       }
     });
 
@@ -325,10 +343,75 @@ test("TIDE grading API authenticated workflow", async (suite) => {
       const staleSession = await request("/auth/me", {}, revocationSession);
       assert.equal(staleSession.response.status, 401);
     });
+
+    await suite.test("teachers reset passwords and disable accounts with audit records", async () => {
+      const studentList = await request("/auth/users", {}, studentSession);
+      assert.equal(studentList.response.status, 403);
+
+      const users = await request("/auth/users", {}, teacherSession);
+      assert.equal(users.response.status, 200);
+      const managed = users.body.find((user: { id: string }) => user.id === lifecycleUser.id);
+      assert.deepEqual(
+        Object.keys(managed).sort(),
+        ["createdAt", "disabled", "displayName", "id", "role", "username"],
+      );
+
+      const newPassword = "administrator-reset-password-123";
+      const reset = await request(`/auth/users/${lifecycleUser.id}/password-reset`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: newPassword }),
+      }, teacherSession);
+      assert.equal(reset.response.status, 204);
+      assert.equal((await request("/auth/me", {}, lifecycleSession)).response.status, 401);
+      const resetSession = await login(lifecycleUser.username, newPassword);
+
+      const disabled = await request(`/auth/users/${lifecycleUser.id}/status`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ disabled: true }),
+      }, teacherSession);
+      assert.equal(disabled.response.status, 200);
+      assert.equal(disabled.body.disabled, true);
+      assert.equal((await request("/auth/me", {}, resetSession)).response.status, 401);
+      const rejectedLogin = await request("/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: lifecycleUser.username, password: newPassword }),
+      });
+      assert.equal(rejectedLogin.response.status, 401);
+
+      const selfDisable = await request(`/auth/users/${teacher.id}/status`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ disabled: true }),
+      }, teacherSession);
+      assert.equal(selfDisable.response.status, 409);
+
+      const enabled = await request(`/auth/users/${lifecycleUser.id}/status`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ disabled: false }),
+      }, teacherSession);
+      assert.equal(enabled.response.status, 200);
+      assert.equal(enabled.body.disabled, false);
+      await login(lifecycleUser.username, newPassword);
+
+      const auditActions = await prisma.authAudit.findMany({
+        where: { targetUserId: lifecycleUser.id },
+        select: { action: true },
+      });
+      const actions = auditActions.map((audit) => audit.action);
+      for (const expected of ["password_reset", "account_disabled", "account_enabled"]) {
+        assert.ok(actions.includes(expected as typeof actions[number]));
+      }
+    });
   } finally {
     if (assignmentId) await prisma.assignment.deleteMany({ where: { id: assignmentId } });
+    const userIds = [teacher.id, student.id, otherTeacher.id, revocationUser.id, lifecycleUser.id];
+    await prisma.authAudit.deleteMany();
     await prisma.user.deleteMany({
-      where: { id: { in: [teacher.id, student.id, otherTeacher.id, revocationUser.id] } },
+      where: { id: { in: userIds } },
     });
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await prisma.$disconnect();

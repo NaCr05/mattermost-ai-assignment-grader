@@ -22,6 +22,7 @@ __pycache__/
 .DS_Store
 
 tmp/
+backups/
 
 # 本地会话交接与生成型演示产物不属于正式项目交付内容。
 CURRENT_SESSION_HANDOFF.md
