@@ -14,6 +14,7 @@ import { useReviewWorkspace } from "./grading/use-review-workspace";
 import { LoginScreen } from "./auth/LoginScreen";
 import { useSession } from "./auth/use-session";
 import type { Session } from "./auth/gateway";
+import { AdminAccountPanel } from "./auth/AdminAccountPanel";
 
 const statusLabels: Record<EvaluationStatus, string> = {
   generated: "待教师审核",
@@ -106,6 +107,7 @@ function ReviewWorkspace(input: {
               退出所有设备
             </button>
           </div>
+          <AdminAccountPanel session={input.session} />
           {input.authError && <p className="auth-error" role="alert">{input.authError}</p>}
           <label>
             <span>搜索作业</span>

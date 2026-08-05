@@ -53,6 +53,7 @@ flowchart LR
 ├─ tests/         六类验收测试与结果
 ├─ assets/        验收截图和演示素材
 ├─ scripts/       本地开发启动与验证脚本
+├─ deploy/        单机生产 HTTPS 入口
 ├─ .github/       CI、安全扫描和 Dependabot
 ├─ docker-compose.yml
 ├─ docker-compose.prod.yml
@@ -180,25 +181,44 @@ Invoke-RestMethod http://localhost:8000/health
 
 ### 生产运行模式
 
-生产模式使用独立配置，后端运行预构建 Node bundle，前端由 Nginx 提供静态文件。PostgreSQL、Backend、Agent 和 Frontend 容器均以非 root 用户运行；PostgreSQL、Backend 和 Agent 不映射宿主机端口，只有 Nginx 对外发布：
+生产模式面向单台服务器 Compose：后端运行预构建 Node bundle，前端由 Nginx 提供静态文件，非 root Caddy 是唯一对外入口并自动申请和续期 HTTPS 证书。PostgreSQL、Backend、Agent 和 Frontend 均不映射宿主机端口，所有容器都以非 root 用户运行：
 
 ```powershell
 Copy-Item .env.production.example .env.production
-# 编辑 .env.production，设置强密码、随机密钥和真实 HTTPS PUBLIC_ORIGIN
+# 编辑 .env.production，设置域名、强密码、随机密钥和真实 HTTPS PUBLIC_ORIGIN
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
 docker compose --env-file .env.production -f docker-compose.prod.yml ps
 ```
 
-生产入口默认为 `http://localhost:8080`，正式部署必须放在 TLS 反向代理之后，并让 `PUBLIC_ORIGIN` 与浏览器实际访问的 HTTPS Origin 完全一致。Nginx 将 `/api/*` 转发到内部 Backend，将 `/mattermost/*` 转发到 Mattermost adapter。
+把域名的 A/AAAA 记录指向该服务器并开放 TCP 80、TCP 443 和 UDP 443。`SITE_ADDRESS` 填写域名，`PUBLIC_ORIGIN` 填写完全一致的 `https://域名`；Caddy 负责 TLS，内部 Nginx 将 `/api/*` 转发到 Backend，并将 `/mattermost/*` 转发到 Mattermost adapter。数据库、Backend、Agent 和 Nginx 没有公开端口。
 
 生产健康检查：
 
 ```powershell
-Invoke-RestMethod http://localhost:8080/healthz
-Invoke-RestMethod http://localhost:8080/api/health
+Invoke-RestMethod https://你的域名/healthz
+Invoke-RestMethod https://你的域名/api/health
+Invoke-RestMethod https://你的域名/api/readyz
 ```
 
 生产启动只执行 `prisma migrate deploy`，不会生成测试账号、作业、提交或评测，也不会执行 Seed。
+
+### 备份与恢复演练
+
+备份脚本使用 PostgreSQL custom format，不包含课程 Seed 或仓库数据集操作：
+
+```powershell
+.\scripts\backup.ps1 -EnvironmentFile .env.production
+```
+
+恢复脚本拒绝覆盖当前生产数据库，也拒绝覆盖任何已存在数据库。先恢复到一个新数据库并验证：
+
+```powershell
+.\scripts\restore.ps1 -EnvironmentFile .env.production `
+  -BackupPath .\backups\tide-grader-YYYYMMDD-HHMMSS.dump `
+  -TargetDatabase tide_restore_YYYYMMDD
+```
+
+确认迁移、账号、作业、提交和评估均正确后，才可把 `.env.production` 中的 `POSTGRES_DB` 切换到新数据库并重启 Compose。统一验证脚本会在隔离生产栈中自动执行一次空库备份/恢复演练，并删除该临时恢复数据库。
 
 ### 首次创建平台管理员
 
@@ -215,7 +235,9 @@ Invoke-RestMethod -Method Post -Uri http://localhost:3001/auth/bootstrap `
   -Headers $headers -ContentType "application/json" -Body $body
 ```
 
-完成后应从部署配置中移除或轮换 `BOOTSTRAP_TOKEN`。教师登录后可以通过受保护的 `POST /auth/users` 创建教师或学生账号。浏览器会话使用 HttpOnly Cookie；前端自动管理 CSRF Token，客户端传入的 `studentId`、`createdById` 或 `reviewedById` 不再作为身份依据。“退出所有设备”会递增数据库中的会话版本，使此前签发的 Cookie 全部失效。
+完成后应从部署配置中移除或轮换 `BOOTSTRAP_TOKEN`。当前角色模型中教师同时承担平台账号管理职责：教师可在工作台的“账号管理”中查看账号、为其他用户重置密码、禁用或重新启用账号。重置密码和改变账号状态都会递增会话版本，使目标用户此前签发的 Cookie 全部失效；教师不能禁用自己的账号。创建用户、登录结果、密码重置、账号状态变更和全会话撤销都会写入 `AuthAudit`，不记录密码、答案、Token 或请求正文。
+
+浏览器会话使用 HttpOnly Cookie，前端自动管理 CSRF Token。客户端传入的 `studentId`、`createdById` 或 `reviewedById` 不作为身份依据。“退出所有设备”同样会撤销此前签发的全部 Cookie。
 
 登录按来源 IP 和规范化用户名分别限速，Bootstrap 也按来源 IP 限速。默认限速器保存在单个 Backend 进程内，适合当前单实例 Compose；多副本部署前应改为共享限速存储。
 
@@ -373,12 +395,16 @@ http://localhost:5173
 | 方法 | 路径 | 用途 |
 |---|---|---|
 | GET | `/health` | 服务和数据库健康检查 |
+| GET | `/readyz` | 数据库与 Agent 整体就绪检查 |
 | POST | `/auth/bootstrap` | 仅首次创建平台教师账号 |
 | POST | `/auth/login` | 登录并签发 HttpOnly 会话 |
 | GET | `/auth/me` | 读取当前会话身份和 CSRF Token |
 | POST | `/auth/logout` | 退出当前会话 |
 | POST | `/auth/sessions/revoke` | 撤销该账号此前签发的全部会话 |
+| GET | `/auth/users` | 教师查看平台账号 |
 | POST | `/auth/users` | 教师创建平台账号 |
+| POST | `/auth/users/:id/password-reset` | 教师重置目标账号密码并撤销旧会话 |
+| PATCH | `/auth/users/:id/status` | 教师禁用或重新启用目标账号 |
 | POST | `/assignments` | 教师发布作业 |
 | GET | `/assignments` | 作业列表 |
 | GET | `/assignments/:id` | 作业详情 |
@@ -525,14 +551,14 @@ docker compose up -d --build agent backend
 
 在线模式使用结构化提示词、Pydantic 校验，并在输出校验失败时重试一次。
 
-Agent 会记录 Provider、模型、Prompt 版本、耗时、尝试次数和 Token 用量，但不会把学生答案或原始模型输出写入指标。费用估算默认关闭；如需启用，请根据供应商当前价格填写：
+Agent 会记录 Provider、模型、Prompt 版本、耗时、尝试次数和 Token 用量，但不会把学生答案或原始模型输出写入指标。每次成功评估还会把模型、Prompt 版本、Agent 请求 ID、Token、耗时和估算成本持久化到内部 `Evaluation` 字段，用于复现和运营审计；这些字段不会进入公开评估 DTO。费用估算默认关闭；如需启用，请根据供应商当前价格填写：
 
 ```dotenv
 DEEPSEEK_INPUT_COST_PER_MILLION_USD=0
 DEEPSEEK_OUTPUT_COST_PER_MILLION_USD=0
 ```
 
-真实模型评估涉及付费调用，不进入 CI。确认 Agent 已以 `live` 模式运行后，显式授权执行匿名合成用例：
+真实模型评估涉及付费调用，不进入普通 CI。确认 Agent 已以 `live` 模式运行后，可以在本地显式授权执行 18 个匿名合成用例，其中 15 个覆盖中英文正确/错误答案、模糊回答和提示词注入，3 个验证非法输入被拒绝：
 
 ```powershell
 $env:ALLOW_PAID_LIVE_EVALUATION="true"
@@ -540,7 +566,9 @@ $env:AGENT_URL="http://127.0.0.1:8000"
 python ./tests/run_live_model_evaluation.py
 ```
 
-脚本不读取 Seed 或课程数据集，也不把模型原始输出写入磁盘。
+默认门禁为通过率不低于 80%、P95 延迟不高于 90 秒、总估算成本不超过 1 美元；均可通过 `LIVE_EVAL_*` 环境变量调整。脚本不读取 Seed 或课程数据集，也不把题目、答案或模型原始输出写入摘要。
+
+GitHub 的 `Live model evaluation` workflow 只能手动触发，并要求勾选付费确认。仓库 Environment `live-model-evaluation` 需要配置 `DEEPSEEK_API_KEY` secret；模型、Base URL 和单价可配置为同名 Variables。workflow 只保存脱敏 JSON 摘要 30 天，不参与普通 PR 和 push。
 
 ## 十、能力边界
 

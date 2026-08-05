@@ -21,13 +21,14 @@
 ## 生产安全基线
 
 - `ENABLE_PASCAL_EXECUTION=false`；
-- 使用 HTTPS，并将 `PUBLIC_ORIGIN` 设置为真实 Origin；
+- 使用仓库提供的 Caddy HTTPS 入口，将 `SITE_ADDRESS` 设置为域名，并让 `PUBLIC_ORIGIN` 与真实 HTTPS Origin 完全一致；
 - 使用随机 `AUTH_SECRET`、数据库密码和一次性 `BOOTSTRAP_TOKEN`；
 - Bootstrap 完成后轮换或移除 Token；
 - 不向宿主机发布 Backend、Agent 或 PostgreSQL 端口；
 - 保持登录限速开启；
 - 定期执行 `./scripts/verify.ps1` 并检查 Security workflow；
-- 备份 PostgreSQL 数据并验证恢复流程；
+- 使用 `scripts/backup.ps1` 备份 PostgreSQL，并定期用 `scripts/restore.ps1` 恢复到新数据库验证；
+- 定期检查 `AuthAudit` 中的失败登录、密码重置、账号禁用和会话撤销事件；
 - AI 输出仅作辅助，教师负责最终结论。
 
 Pascal 专项执行器不是安全沙箱，即使在本地显式开启，也不得用于处理公开环境中的不可信输入。

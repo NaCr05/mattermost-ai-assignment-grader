@@ -17,6 +17,7 @@ $devProject = "tide-grader-verify-dev-$suffix"
 $prodProject = "tide-grader-verify-prod-$suffix"
 $devStarted = $false
 $prodStarted = $false
+$verificationBackupPath = $null
 
 $environmentValues = [ordered]@{
   POSTGRES_USER = "tide_verify"
@@ -27,6 +28,7 @@ $environmentValues = [ordered]@{
   FRONTEND_PORT = [string](Get-Random -Minimum 48000 -Maximum 50999)
   AGENT_PORT = [string](Get-Random -Minimum 51000 -Maximum 53999)
   HTTP_PORT = [string](Get-Random -Minimum 54000 -Maximum 56999)
+  HTTPS_PORT = [string](Get-Random -Minimum 57000 -Maximum 59999)
   AUTH_SECRET = "verify-auth-secret-$suffix-0123456789abcdef"
   BOOTSTRAP_TOKEN = "verify-bootstrap-token-$suffix"
   AUTH_COOKIE_SECURE = "false"
@@ -40,6 +42,7 @@ $environmentValues = [ordered]@{
   MATTERMOST_ACTION_URL = ""
   LOG_HEALTH_REQUESTS = "false"
   LOG_ERROR_DETAILS = "false"
+  SITE_ADDRESS = "http://"
 }
 $environmentValues.FRONTEND_ORIGIN = "http://127.0.0.1:$($environmentValues.FRONTEND_PORT)"
 $environmentValues.PUBLIC_ORIGIN = "http://127.0.0.1:$($environmentValues.HTTP_PORT)"
@@ -111,12 +114,13 @@ function Get-DatabaseValue {
     [Parameter(Mandatory = $true)]
     [string[]]$ComposeArguments,
     [Parameter(Mandatory = $true)]
-    [string]$Sql
+    [string]$Sql,
+    [string]$Database = $environmentValues.POSTGRES_DB
   )
 
   $value = $Sql | & docker @($ComposeArguments + @(
       "exec", "-T", "db", "psql", "-U", $environmentValues.POSTGRES_USER,
-      "-d", $environmentValues.POSTGRES_DB, "-At"
+      "-d", $Database, "-At"
     ))
   if ($LASTEXITCODE -ne 0) {
     throw "Database verification query failed."
@@ -129,22 +133,24 @@ function Assert-EmptyMigratedDatabase {
     [Parameter(Mandatory = $true)]
     [string[]]$ComposeArguments,
     [Parameter(Mandatory = $true)]
-    [string]$Mode
+    [string]$Mode,
+    [int]$ExpectedMigrationCount
   )
 
   $migrationCount = Get-DatabaseValue -ComposeArguments $ComposeArguments `
     -Sql 'SELECT COUNT(*) FROM "_prisma_migrations";'
-  if ($migrationCount -ne "5") {
-    throw "$Mode expected 5 migrations, observed $migrationCount."
+  if ($migrationCount -ne [string]$ExpectedMigrationCount) {
+    throw "$Mode expected $ExpectedMigrationCount migrations, observed $migrationCount."
   }
 
   $businessCounts = Get-DatabaseValue -ComposeArguments $ComposeArguments -Sql @'
 SELECT (SELECT COUNT(*) FROM "User"),
        (SELECT COUNT(*) FROM "Assignment"),
        (SELECT COUNT(*) FROM "Submission"),
-       (SELECT COUNT(*) FROM "Evaluation");
+       (SELECT COUNT(*) FROM "Evaluation"),
+       (SELECT COUNT(*) FROM "AuthAudit");
 '@
-  if ($businessCounts -ne "0|0|0|0") {
+  if ($businessCounts -ne "0|0|0|0|0") {
     throw "$Mode startup or tests left unexpected business data: $businessCounts."
   }
 }
@@ -171,6 +177,9 @@ try {
     "compose", "-p", $prodProject,
     "-f", "compose.base.yml", "-f", "docker-compose.prod.yml"
   )
+  $expectedMigrationCount = @(
+    Get-ChildItem -LiteralPath (Join-Path $projectRoot "backend/prisma/migrations") -Directory
+  ).Count
 
   Invoke-External -Description "Validating development Compose" -FilePath "docker" `
     -Arguments ($devCompose + @("config", "--quiet"))
@@ -224,7 +233,8 @@ try {
       "node:24-alpine", "node", "/tests/run_acceptance_tests.mjs"
     )
 
-  Assert-EmptyMigratedDatabase -ComposeArguments $devCompose -Mode "Development"
+  Assert-EmptyMigratedDatabase -ComposeArguments $devCompose -Mode "Development" `
+    -ExpectedMigrationCount $expectedMigrationCount
 
   if (-not $SkipProduction) {
     $prodUp = $prodCompose + @("up", "-d", "--wait", "--wait-timeout", [string]$TimeoutSeconds)
@@ -233,20 +243,20 @@ try {
       -FilePath "docker" -Arguments $prodUp
     $prodStarted = $true
 
-    foreach ($service in @("db", "backend", "agent", "frontend")) {
+    foreach ($service in @("db", "backend", "agent", "frontend", "caddy")) {
       $uid = & docker @($prodCompose + @("exec", "-T", $service, "id", "-u"))
       if ($LASTEXITCODE -ne 0 -or ($uid | Out-String).Trim() -eq "0") {
         throw "Production service $service is running as root or could not be inspected."
       }
     }
 
-    $productionPorts = @{
+    $privateProductionPorts = @{
       db = "5432/tcp"
       backend = "3000/tcp"
       agent = "8000/tcp"
       frontend = "8080/tcp"
     }
-    foreach ($service in $productionPorts.Keys) {
+    foreach ($service in $privateProductionPorts.Keys) {
       $containerId = & docker @($prodCompose + @("ps", "-q", $service))
       if ($LASTEXITCODE -ne 0 -or -not ($containerId | Out-String).Trim()) {
         throw "Production service $service could not be inspected."
@@ -254,14 +264,20 @@ try {
       $containerInspection = (& docker inspect ($containerId | Out-String).Trim() | Out-String) |
         ConvertFrom-Json
       $portProperty = $containerInspection[0].NetworkSettings.Ports.PSObject.Properties[
-        $productionPorts[$service]
+        $privateProductionPorts[$service]
       ]
       $isPublished = $null -ne $portProperty -and $null -ne $portProperty.Value
-      if ($service -eq "frontend" -and -not $isPublished) {
-        throw "Production frontend host port was not published."
-      }
-      if ($service -ne "frontend" -and $isPublished) {
+      if ($isPublished) {
         throw "Production service $service unexpectedly publishes a host port."
+      }
+    }
+
+    $caddyContainerId = (& docker @($prodCompose + @("ps", "-q", "caddy")) | Out-String).Trim()
+    $caddyInspection = (& docker inspect $caddyContainerId | Out-String) | ConvertFrom-Json
+    foreach ($port in @("8080/tcp", "8443/tcp", "8443/udp")) {
+      $portProperty = $caddyInspection[0].NetworkSettings.Ports.PSObject.Properties[$port]
+      if ($null -eq $portProperty -or $null -eq $portProperty.Value) {
+        throw "Production Caddy port $port was not published."
       }
     }
 
@@ -276,13 +292,32 @@ try {
       -Uri "http://127.0.0.1:$($environmentValues.HTTP_PORT)/healthz" `
       -TimeoutSec 10
     $apiHealth = Invoke-WebRequest -UseBasicParsing `
-      -Uri "http://127.0.0.1:$($environmentValues.HTTP_PORT)/api/health" `
+      -Uri "http://127.0.0.1:$($environmentValues.HTTP_PORT)/api/readyz" `
       -TimeoutSec 10
     if ($staticHealth.StatusCode -ne 200 -or $apiHealth.StatusCode -ne 200) {
       throw "Production HTTP health checks failed."
     }
 
-    Assert-EmptyMigratedDatabase -ComposeArguments $prodCompose -Mode "Production"
+    Assert-EmptyMigratedDatabase -ComposeArguments $prodCompose -Mode "Production" `
+      -ExpectedMigrationCount $expectedMigrationCount
+
+    $backupPath = Join-Path ([IO.Path]::GetTempPath()) "tide-grader-verify-$suffix.dump"
+    $verificationBackupPath = $backupPath
+    $restoreDatabase = "tide_restore_$suffix"
+    & (Join-Path $projectRoot "scripts/backup.ps1") -EnvironmentFile "" `
+      -ProjectName $prodProject -OutputPath $backupPath
+    & (Join-Path $projectRoot "scripts/restore.ps1") -EnvironmentFile "" `
+      -ProjectName $prodProject -BackupPath $backupPath -TargetDatabase $restoreDatabase
+    $restoredMigrationCount = Get-DatabaseValue -ComposeArguments $prodCompose `
+      -Database $restoreDatabase -Sql 'SELECT COUNT(*) FROM "_prisma_migrations";'
+    if ($restoredMigrationCount -ne [string]$expectedMigrationCount) {
+      throw "Restored database migration count was $restoredMigrationCount."
+    }
+    Invoke-ComposeExec -ComposeArguments $prodCompose -Service "db" `
+      -Command @("dropdb", "-U", $environmentValues.POSTGRES_USER, $restoreDatabase) `
+      -Description "Removing isolated restore-drill database"
+    Remove-Item -LiteralPath $backupPath -Force
+    $verificationBackupPath = $null
     $backendLogs = & docker @($prodCompose + @("logs", "backend")) 2>&1 | Out-String
     if ($backendLogs -match "prisma:seed|seed\.ts") {
       throw "Production startup attempted to run Seed."
@@ -292,6 +327,9 @@ try {
   Write-Host "`nAll TIDE verification gates passed." -ForegroundColor Green
 }
 finally {
+  if ($verificationBackupPath -and (Test-Path -LiteralPath $verificationBackupPath)) {
+    Remove-Item -LiteralPath $verificationBackupPath -Force
+  }
   if (-not $KeepContainers) {
     if ($prodStarted) {
       Remove-VerificationStack -Project $prodProject `

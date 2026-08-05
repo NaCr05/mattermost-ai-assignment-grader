@@ -50,7 +50,7 @@ DeepSeek 模式虽然有结构校验和一次重试，但仍可能受到：
 
 ### 6. 权限与生产安全
 
-Web 入口使用服务端签名的 HttpOnly 会话 Cookie，用户身份从会话取得，写操作需要 CSRF Token。教师只能管理自己创建的作业，学生只能访问和修改自己的提交。Mattermost 继续使用 Token/HMAC 和用户映射作为独立身份 adapter。会话最长 8 小时并携带数据库版本号；用户可递增版本使所有旧 Cookie 失效。登录和 Bootstrap 默认启用进程内限速；多 Backend 副本部署需要共享限速存储。公开部署仍应使用 HTTPS、强随机密钥和反向代理安全策略。
+Web 入口使用服务端签名的 HttpOnly 会话 Cookie，用户身份从会话取得，写操作需要 CSRF Token。教师只能管理自己创建的作业，学生只能访问和修改自己的提交。当前教师角色同时承担平台账号管理职责，可以重置其他账号密码或禁用账号；这些操作撤销目标账号旧会话并写入认证审计。Mattermost 继续使用 Token/HMAC 和用户映射作为独立身份 adapter。会话最长 8 小时并携带数据库版本号；用户可递增版本使所有旧 Cookie 失效。登录和 Bootstrap 默认启用进程内限速，适合当前单机单 Backend Compose。公开部署仍应使用 HTTPS、强随机密钥和反向代理安全策略。
 
 ## 风险控制
 
@@ -61,9 +61,9 @@ Web 入口使用服务端签名的 HttpOnly 会话 Cookie，用户身份从会�
 - 输出需经过后端严格结构校验，公开 DTO 不返回 Agent 原始输出；
 - Web 写操作忽略客户端提交的用户 ID，以登录会话确定操作者；
 - Pascal 代码执行默认关闭；本地 Agent 端口仅绑定 `127.0.0.1`，生产环境不映射 Agent、Backend 或 PostgreSQL 端口；
-- PostgreSQL、Backend、Agent 和 Frontend 容器均以非 root 用户运行；
+- Caddy 是单机生产部署的唯一公开入口；PostgreSQL、Backend、Agent、Frontend 和 Caddy 容器均以非 root 用户运行；
 - 默认启动只部署 migration，不加载 Seed 或课程测试数据；
-- Agent 指标只记录 Provider、模型、Prompt 版本、耗时、重试、Token 和可配置成本估算，不记录学生答案或原始输出；
+- Agent 指标和 Evaluation 内部元数据只记录 Provider、模型、Prompt 版本、耗时、重试、Token 和可配置成本估算，不记录学生答案或原始输出，且不进入公开评估 DTO；
 - 教师修改携带评估版本，检测到并发覆盖时返回冲突而不是静默覆盖；
 - 测试中保留误判，不隐瞒边界。
 

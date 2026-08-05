@@ -66,7 +66,7 @@ export function createGradingModule(
 
   async function findTeacher(actorId: string) {
     return database.user.findFirst({
-      where: { id: actorId, role: "teacher" },
+      where: { id: actorId, role: "teacher", disabledAt: null },
       select: { id: true, username: true, displayName: true },
     });
   }
@@ -139,6 +139,19 @@ export function createGradingModule(
         },
         rubric: submission.assignment.instructions,
       });
+      const observability = agentResult.observability;
+      const agentMetadata = {
+        agentProvider: agentResult.provider,
+        agentRequestId: observability?.requestId ?? null,
+        agentAttempts: agentResult.attempts,
+        modelName: observability?.modelName ?? null,
+        promptVersion: observability?.promptVersion ?? null,
+        agentDurationMs: observability?.durationMs ?? null,
+        inputTokens: observability?.usage.inputTokens ?? null,
+        outputTokens: observability?.usage.outputTokens ?? null,
+        totalTokens: observability?.usage.totalTokens ?? null,
+        estimatedCostUsd: observability?.usage.estimatedCostUsd ?? null,
+      };
 
       const evaluation = await database.$transaction(async (transaction) => {
         const savedEvaluation = await transaction.evaluation.upsert({
@@ -155,6 +168,7 @@ export function createGradingModule(
             status: "generated",
             agentRawOutput: agentResult.raw_output,
             errorMessage: null,
+            ...agentMetadata,
             version: { increment: 1 },
             reviewedById: null,
             reviewedAt: null,
@@ -171,6 +185,7 @@ export function createGradingModule(
             grade: agentResult.grade,
             status: "generated",
             agentRawOutput: agentResult.raw_output,
+            ...agentMetadata,
           },
         });
 

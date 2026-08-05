@@ -8,6 +8,7 @@ import {
 } from "./rate-limit";
 import type { SessionPayload, SessionService } from "./session";
 import { isNonEmptyString, sendServerError } from "../http/error-mapping";
+import { createAuthAdminRouter } from "./admin-routes";
 
 type Database = typeof defaultPrisma;
 type UserRole = "teacher" | "student";
@@ -75,13 +76,17 @@ export function createAuthModule(input: {
       }
       const user = await database.user.findUnique({
         where: { id: session.userId },
-        select: { ...publicUserSelect, sessionVersion: true },
+        select: { ...publicUserSelect, sessionVersion: true, disabledAt: true },
       });
-      if (!user || user.sessionVersion !== session.sessionVersion) {
+      if (!user || user.disabledAt || user.sessionVersion !== session.sessionVersion) {
         sessions.clearCookie(response);
         return response.status(401).json({ message: "Authentication required" });
       }
-      const { sessionVersion: _sessionVersion, ...publicUser } = user;
+      const {
+        sessionVersion: _sessionVersion,
+        disabledAt: _disabledAt,
+        ...publicUser
+      } = user;
       (response.locals as AuthLocals).currentUser = publicUser;
       (response.locals as AuthLocals).session = session;
       next();
@@ -138,16 +143,22 @@ export function createAuthModule(input: {
         });
       }
       const passwordHash = await hashPassword(password);
-      const user = await database.user.upsert({
-        where: { username: username.trim() },
-        update: { displayName: displayName.trim(), role: "teacher", passwordHash },
-        create: {
-          username: username.trim(),
-          displayName: displayName.trim(),
-          role: "teacher",
-          passwordHash,
-        },
-        select: publicUserSelect,
+      const user = await database.$transaction(async (transaction) => {
+        const created = await transaction.user.upsert({
+          where: { username: username.trim() },
+          update: { displayName: displayName.trim(), role: "teacher", passwordHash },
+          create: {
+            username: username.trim(),
+            displayName: displayName.trim(),
+            role: "teacher",
+            passwordHash,
+          },
+          select: publicUserSelect,
+        });
+        await transaction.authAudit.create({
+          data: { action: "bootstrap_completed", targetUserId: created.id },
+        });
+        return created;
       });
       response.status(201).json(user);
     } catch (error) {
@@ -174,10 +185,19 @@ export function createAuthModule(input: {
         );
       }
       const user = await database.user.findUnique({ where: { username: username.trim() } });
-      if (!user?.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
+      const passwordMatches = user?.passwordHash
+        ? await verifyPassword(password, user.passwordHash)
+        : false;
+      if (!user || !passwordMatches || user.disabledAt) {
+        await database.authAudit.create({
+          data: { action: "login_failed", targetUserId: user?.id },
+        });
         return response.status(401).json({ message: "Invalid username or password" });
       }
       rateLimiters.loginByAccount.reset(accountKey);
+      await database.authAudit.create({
+        data: { action: "login_succeeded", targetUserId: user.id },
+      });
       const session = sessions.issue(user.id, user.sessionVersion);
       sessions.setCookie(response, session.cookieValue);
       response.json({
@@ -217,12 +237,21 @@ export function createAuthModule(input: {
         if (!currentUser || !session) {
           return response.status(401).json({ message: "Authentication required" });
         }
-        await database.user.updateMany({
-          where: {
-            id: currentUser.id,
-            sessionVersion: session.sessionVersion,
-          },
-          data: { sessionVersion: { increment: 1 } },
+        await database.$transaction(async (transaction) => {
+          await transaction.user.updateMany({
+            where: {
+              id: currentUser.id,
+              sessionVersion: session.sessionVersion,
+            },
+            data: { sessionVersion: { increment: 1 } },
+          });
+          await transaction.authAudit.create({
+            data: {
+              action: "sessions_revoked",
+              actorId: currentUser.id,
+              targetUserId: currentUser.id,
+            },
+          });
         });
         sessions.clearCookie(response);
         response.status(204).end();
@@ -232,42 +261,13 @@ export function createAuthModule(input: {
     },
   );
 
-  router.post(
-    "/users",
+  router.use("/users", createAuthAdminRouter({
+    database,
     requireSession,
     requireCsrf,
-    requireRole("teacher"),
-    async (request, response) => {
-      try {
-        const { username, displayName, password, role } = request.body;
-        if (
-          !isNonEmptyString(username) ||
-          !isNonEmptyString(displayName) ||
-          !isNonEmptyString(password) ||
-          password.length < 12 ||
-          (role !== "teacher" && role !== "student")
-        ) {
-          return response.status(400).json({
-            message: "username, displayName, role and a password of at least 12 characters are required",
-          });
-        }
-        const existing = await database.user.findUnique({ where: { username: username.trim() } });
-        if (existing) return response.status(409).json({ message: "Username already exists" });
-        const user = await database.user.create({
-          data: {
-            username: username.trim(),
-            displayName: displayName.trim(),
-            role,
-            passwordHash: await hashPassword(password),
-          },
-          select: publicUserSelect,
-        });
-        response.status(201).json(user);
-      } catch (error) {
-        sendServerError(response, "Failed to create user", error);
-      }
-    },
-  );
+    requireTeacher: requireRole("teacher"),
+    currentUser: getCurrentUser,
+  }));
 
   return { router, requireSession, requireCsrf, requireRole };
 }
