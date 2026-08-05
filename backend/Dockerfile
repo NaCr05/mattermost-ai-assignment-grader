@@ -1,4 +1,4 @@
-FROM node:24-alpine AS dependencies
+FROM node:25-alpine AS dependencies
 
 WORKDIR /app
 
@@ -25,14 +25,14 @@ COPY . .
 RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npm run prisma:generate
 RUN npm run build
 
-FROM node:24-alpine AS production-dependencies
+FROM node:25-alpine AS production-dependencies
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-FROM node:24-alpine AS production
+FROM node:25-alpine AS production
 
 ENV NODE_ENV=production
 
