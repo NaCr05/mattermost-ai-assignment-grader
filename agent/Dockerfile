@@ -19,10 +19,14 @@ EXPOSE 8000
 
 FROM base AS development
 
+ENV RUFF_CACHE_DIR=/tmp/ruff-cache
+
 USER root
 
 COPY requirements-dev.txt ./
-RUN pip install --no-cache-dir -r requirements-dev.txt
+RUN pip install --no-cache-dir -r requirements-dev.txt \
+    && mkdir -p /tmp/ruff-cache \
+    && chown tide:tide /tmp/ruff-cache
 
 USER tide
 
