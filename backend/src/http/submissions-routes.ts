@@ -73,7 +73,7 @@ export function createSubmissionsRouter(input: {
           },
         });
       });
-      response.status(existing ? 200 : 201).json(submission);
+      response.status(existing ? 200 : 201).json(toSubmissionDto(submission));
     } catch (error) {
       sendServerError(response, "Failed to submit answer", error);
     }

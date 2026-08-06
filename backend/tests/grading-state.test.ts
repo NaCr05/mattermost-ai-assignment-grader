@@ -90,7 +90,7 @@ test("Grading Module preserves failure and concurrency invariants", async (suite
       assert.equal(saved.estimatedCostUsd?.toString(), "0.0012");
     });
 
-    await suite.test("regrade failure marks both Submission and Evaluation failed", async () => {
+    await suite.test("regrade failure marks both records failed and a reviewed edit restores consistency", async () => {
       const record = await submission("regrade failure");
       const success = createGradingModule({ database: prisma, evaluationAgent: createFakeEvaluationAgent(result) });
       const generated = await success.evaluateSubmission({ submissionId: record.id });
@@ -112,6 +112,23 @@ test("Grading Module preserves failure and concurrency invariants", async (suite
       assert.equal(savedEvaluation.status, "failed");
       assert.equal(savedEvaluation.errorMessage, "Evaluation Agent request failed.");
       assert.doesNotMatch(savedEvaluation.errorMessage ?? "", /provider secret/);
+      assert.equal(savedEvaluation.version, generated.evaluation.version + 1);
+
+      const recovered = await failure.reviewEvaluation({
+        kind: "modify",
+        evaluationId: savedEvaluation.id,
+        actorId: teacher.id,
+        expectedVersion: savedEvaluation.version,
+        changes: { score: 80 },
+      });
+      assert.ok(recovered);
+      const [recoveredSubmission, recoveredEvaluation] = await Promise.all([
+        prisma.submission.findUniqueOrThrow({ where: { id: record.id } }),
+        prisma.evaluation.findUniqueOrThrow({ where: { id: savedEvaluation.id } }),
+      ]);
+      assert.equal(recoveredSubmission.status, "evaluated");
+      assert.equal(recoveredEvaluation.status, "modified");
+      assert.equal(recoveredEvaluation.errorMessage, null);
     });
 
     await suite.test("two initial evaluations allow one owner and one conflict", async () => {
@@ -153,6 +170,62 @@ test("Grading Module preserves failure and concurrency invariants", async (suite
       const rejected = writes.find((write) => write.status === "rejected") as PromiseRejectedResult;
       assert.ok(rejected.reason instanceof GradingError);
       assert.equal(rejected.reason.code, "conflict");
+    });
+
+    await suite.test("confirm advances the version and invalidates an older edit", async () => {
+      const record = await submission("confirm invalidates old edit");
+      const grading = createGradingModule({ database: prisma, evaluationAgent: createFakeEvaluationAgent(result) });
+      const generated = await grading.evaluateSubmission({ submissionId: record.id });
+      assert.ok(generated);
+
+      const confirmed = await grading.reviewEvaluation({
+        kind: "confirm",
+        evaluationId: generated.evaluation.id,
+        actorId: teacher.id,
+      });
+      assert.ok(confirmed);
+      assert.equal(confirmed.evaluation.version, generated.evaluation.version + 1);
+
+      await assert.rejects(
+        () => grading.reviewEvaluation({
+          kind: "modify",
+          evaluationId: generated.evaluation.id,
+          actorId: teacher.id,
+          expectedVersion: generated.evaluation.version,
+          changes: { score: 77 },
+        }),
+        (error: unknown) => error instanceof GradingError && error.code === "conflict",
+      );
+    });
+
+    await suite.test("two concurrent regrades invoke the Agent exactly once", async () => {
+      const record = await submission("concurrent regrade");
+      const initial = createGradingModule({ database: prisma, evaluationAgent: createFakeEvaluationAgent(result) });
+      const generated = await initial.evaluateSubmission({ submissionId: record.id });
+      assert.ok(generated);
+
+      let agentCalls = 0;
+      const grading = createGradingModule({
+        database: prisma,
+        evaluationAgent: createFakeEvaluationAgent(async () => {
+          agentCalls += 1;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return result;
+        }),
+      });
+      const attempts = await Promise.allSettled([
+        grading.reviewEvaluation({ kind: "regrade", evaluationId: generated.evaluation.id, actorId: teacher.id }),
+        grading.reviewEvaluation({ kind: "regrade", evaluationId: generated.evaluation.id, actorId: teacher.id }),
+      ]);
+
+      assert.equal(agentCalls, 1);
+      assert.equal(attempts.filter((attempt) => attempt.status === "fulfilled").length, 1);
+      const rejected = attempts.find((attempt) => attempt.status === "rejected") as PromiseRejectedResult;
+      assert.ok(rejected.reason instanceof GradingError);
+      assert.equal(rejected.reason.code, "conflict");
+      assert.equal(await prisma.evaluationAudit.count({
+        where: { submissionId: record.id, action: "regraded" },
+      }), 1);
     });
   } finally {
     await prisma.assignment.deleteMany({ where: { createdById: teacher.id } });

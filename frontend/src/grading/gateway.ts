@@ -20,8 +20,8 @@ export type GradingGateway = {
   ): Promise<SubmissionSummary>;
   loadEvaluationAudits(submissionId: string): Promise<EvaluationAuditResponse>;
   evaluateSubmission(submissionId: string): Promise<void>;
-  confirmEvaluation(evaluationId: string): Promise<void>;
-  regradeEvaluation(evaluationId: string): Promise<void>;
+  confirmEvaluation(evaluationId: string, expectedVersion: number): Promise<void>;
+  regradeEvaluation(evaluationId: string, expectedVersion: number): Promise<void>;
   updateEvaluation(
     evaluationId: string,
     update: EvaluationUpdate,

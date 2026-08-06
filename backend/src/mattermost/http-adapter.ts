@@ -1,5 +1,5 @@
 import express from "express";
-import type { createGradingModule } from "../grading/module";
+import { GradingError, type createGradingModule } from "../grading/module";
 import { logError, logInfo, logWarn } from "../logger";
 import type { prisma as defaultPrisma } from "../prisma";
 import { isNonEmptyString } from "../http/error-mapping";
@@ -194,14 +194,16 @@ export function createMattermostRouter(input: {
         return response.status(400).json({ ephemeral_text: "交互请求缺少用户或操作信息。" });
       }
       const actionContext = context as Record<string, unknown>;
-      const { action, evaluationId, submissionId, signature } = actionContext;
+      const { action, evaluationId, submissionId, version, signature } = actionContext;
       if (
         (action !== "confirm" && action !== "regrade") ||
-        !isNonEmptyString(evaluationId) || !isNonEmptyString(submissionId) || !isNonEmptyString(signature)
+        !isNonEmptyString(evaluationId) || !isNonEmptyString(submissionId) ||
+        !Number.isInteger(version) || Number(version) < 1 || !isNonEmptyString(signature)
       ) {
         return response.status(400).json({ ephemeral_text: "交互操作参数无效。" });
       }
-      if (!input.signer.verify(action, evaluationId, submissionId, signature)) {
+      const expectedVersion = Number(version);
+      if (!input.signer.verify(action, evaluationId, submissionId, expectedVersion, signature)) {
         logWarn("mattermost.action_signature_rejected", {
           requestId: response.locals.requestId,
           action,
@@ -223,6 +225,11 @@ export function createMattermostRouter(input: {
       if (!evaluation || evaluation.submissionId !== submissionId) {
         return response.status(404).json({ ephemeral_text: "评估记录不存在或已经更新，请重新执行 /ds summary。" });
       }
+      if (evaluation.version !== expectedVersion) {
+        return response.status(409).json({
+          ephemeral_text: "评估版本已经更新，请重新执行 /ds summary 后再操作。",
+        });
+      }
       logInfo("mattermost.action_received", {
         requestId: response.locals.requestId,
         action,
@@ -232,7 +239,12 @@ export function createMattermostRouter(input: {
         username,
       });
       if (action === "confirm") {
-        const result = await input.grading.reviewEvaluation({ kind: "confirm", evaluationId, actorId: user.id });
+        const result = await input.grading.reviewEvaluation({
+          kind: "confirm",
+          evaluationId,
+          actorId: user.id,
+          expectedVersion,
+        });
         if (!result) return response.status(404).json({ ephemeral_text: "评估记录不存在。" });
         logInfo("mattermost.action_completed", {
           requestId: response.locals.requestId,
@@ -247,7 +259,12 @@ export function createMattermostRouter(input: {
           skip_slack_parsing: true,
         });
       }
-      void input.grading.reviewEvaluation({ kind: "regrade", evaluationId, actorId: user.id })
+      void input.grading.reviewEvaluation({
+        kind: "regrade",
+        evaluationId,
+        actorId: user.id,
+        expectedVersion,
+      })
         .then((result) => {
           if (result) logInfo("mattermost.action_completed", {
             action,
@@ -267,6 +284,13 @@ export function createMattermostRouter(input: {
         skip_slack_parsing: true,
       });
     } catch (error) {
+      if (error instanceof GradingError) {
+        return response.status(error.code === "forbidden" ? 403 : 409).json({
+          ephemeral_text: error.code === "forbidden"
+            ? "当前账号无权执行该审核操作。"
+            : "评估状态已经更新，请重新执行 /ds summary 后再操作。",
+        });
+      }
       logError("mattermost.action_failed", error, { requestId: response.locals.requestId });
       response.status(500).json({ ephemeral_text: "交互操作处理失败，请检查后端日志。" });
     }

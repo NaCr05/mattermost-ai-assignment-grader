@@ -15,10 +15,15 @@ export function createEvaluationsRouter(input: {
 
   router.post("/:id/confirm", async (request, response) => {
     try {
+      const expectedVersion = request.body?.expectedVersion;
+      if (expectedVersion !== undefined && (!Number.isInteger(expectedVersion) || expectedVersion < 1)) {
+        return response.status(400).json({ message: "expectedVersion must be a positive integer" });
+      }
       const result = await input.grading.reviewEvaluation({
         kind: "confirm",
         evaluationId: request.params.id,
         actorId: input.currentUser(response)!.id,
+        expectedVersion,
       });
       if (!result) return response.status(404).json({ message: "Evaluation not found" });
       response.json(toEvaluationDto(result.evaluation));
@@ -94,10 +99,15 @@ export function createEvaluationsRouter(input: {
 
   router.post("/:id/regrade", async (request, response) => {
     try {
+      const expectedVersion = request.body?.expectedVersion;
+      if (expectedVersion !== undefined && (!Number.isInteger(expectedVersion) || expectedVersion < 1)) {
+        return response.status(400).json({ message: "expectedVersion must be a positive integer" });
+      }
       const result = await input.grading.reviewEvaluation({
         kind: "regrade",
         evaluationId: request.params.id,
         actorId: input.currentUser(response)!.id,
+        expectedVersion,
       });
       if (!result) return response.status(404).json({ message: "Evaluation not found" });
       response.json({ evaluation: toEvaluationDto(result.evaluation), agent: result.agent });

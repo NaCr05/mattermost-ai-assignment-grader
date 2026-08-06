@@ -50,12 +50,13 @@ flowchart LR
 ├─ backend/       Express adapter + Grading Module + Prisma + 自动测试
 ├─ frontend/      React UI + Review Workspace Module + HTTP/Fake adapter
 ├─ agent/         FastAPI adapter + Evaluation Module + Mock/DeepSeek adapter
-├─ tests/         六类验收测试与结果
+├─ tests/         合成验收、浏览器 smoke 与验证结果
 ├─ assets/        验收截图和演示素材
 ├─ scripts/       本地开发启动与验证脚本
 ├─ deploy/        单机生产 HTTPS 入口
 ├─ .github/       CI、安全扫描和 Dependabot
 ├─ docker-compose.yml
+├─ docker-compose.smoke.yml
 ├─ docker-compose.prod.yml
 ├─ compose.base.yml
 └─ .env.example
@@ -165,7 +166,7 @@ Invoke-RestMethod http://localhost:8000/health
 ./scripts/verify.ps1
 ```
 
-该脚本创建隔离的开发和生产 Compose 项目，运行 Backend、Frontend、Agent 全部检查，验证 migration-only 空库、生产静态入口、端口限制、非 root UID、Pascal 默认关闭以及依赖审计，最后自动删除临时容器和命名卷。它不会执行 Seed，也不会读取或整理课程数据集。
+该脚本创建隔离的开发和生产 Compose 项目，运行 Backend、Frontend、Agent 全部检查，并用真实 Chromium 验证开发前端已经挂载且没有浏览器错误；随后验证 migration-only 空库、生产静态入口、端口限制、非 root UID、Pascal 默认关闭以及依赖审计，最后自动删除临时容器和命名卷。它不会执行 Seed，也不会读取或整理课程数据集。
 
 页面与服务：
 
@@ -495,12 +496,12 @@ docker compose exec backend npm run test:api
 预期：
 
 ```text
-tests 14
-pass 14
+tests 20
+pass 20
 fail 0
 ```
 
-测试覆盖健康检查与请求 ID、参数校验、角色权限、发布、提交、首次评估、重评、教师修改、确认、汇总、EvaluationAudit、Slash Token、交互按钮签名和有效回调。每次使用唯一作业 ID，结束后自动删除测试作业及其级联数据，不污染演示列表。
+测试覆盖健康检查与请求 ID、参数校验、角色权限、发布、提交、首次评估、失败恢复、并发重评、乐观锁、教师修改、确认、显式 DTO 投影、汇总、EvaluationAudit、Slash Token、版本绑定的交互按钮签名和有效回调。每次使用唯一作业 ID，结束后自动删除测试作业及其级联数据，不污染演示列表。
 
 ### 结构化日志
 

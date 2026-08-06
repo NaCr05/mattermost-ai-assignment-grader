@@ -177,6 +177,11 @@ try {
     "compose", "-p", $prodProject,
     "-f", "compose.base.yml", "-f", "docker-compose.prod.yml"
   )
+  $smokeCompose = @(
+    "compose", "-p", $devProject,
+    "-f", "compose.base.yml", "-f", "docker-compose.yml",
+    "-f", "docker-compose.smoke.yml", "--profile", "test"
+  )
   $expectedMigrationCount = @(
     Get-ChildItem -LiteralPath (Join-Path $projectRoot "backend/prisma/migrations") -Directory
   ).Count
@@ -185,12 +190,24 @@ try {
     -Arguments ($devCompose + @("config", "--quiet"))
   Invoke-External -Description "Validating production Compose" -FilePath "docker" `
     -Arguments ($prodCompose + @("config", "--quiet"))
+  Invoke-External -Description "Validating browser smoke Compose" -FilePath "docker" `
+    -Arguments ($smokeCompose + @("config", "--quiet"))
 
   $devUp = $devCompose + @("up", "-d", "--wait", "--wait-timeout", [string]$TimeoutSeconds)
   if (-not $NoBuild) { $devUp += "--build" }
   Invoke-External -Description "Starting isolated development verification stack" `
     -FilePath "docker" -Arguments $devUp
   $devStarted = $true
+
+  $browserSmoke = $smokeCompose + @("run", "--rm", "--no-deps")
+  if (-not $NoBuild) { $browserSmoke += "--build" }
+  $browserSmoke += "browser-smoke"
+  Invoke-External -Description "Development frontend browser smoke" `
+    -FilePath "docker" -Arguments $browserSmoke
+  Invoke-External -Description "Browser smoke dependency audit" `
+    -FilePath "docker" -Arguments ($smokeCompose + @(
+      "run", "--rm", "--no-deps", "browser-smoke", "npm", "audit"
+    ))
 
   Invoke-ComposeExec -ComposeArguments $devCompose -Service "backend" `
     -Command @("npm", "run", "typecheck") -Description "Backend type check"

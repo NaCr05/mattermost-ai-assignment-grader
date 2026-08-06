@@ -21,6 +21,7 @@ export type ReviewEvaluationCommand =
       kind: "confirm";
       evaluationId: string;
       actorId: string;
+      expectedVersion?: number;
     }
   | {
       kind: "modify";
@@ -33,7 +34,16 @@ export type ReviewEvaluationCommand =
       kind: "regrade";
       evaluationId: string;
       actorId: string;
+      expectedVersion?: number;
     };
+
+const editableEvaluationStatuses = [
+  "generated",
+  "confirmed",
+  "modified",
+  "failed",
+] as const;
+const confirmableEvaluationStatuses = ["generated", "modified", "failed"] as const;
 
 export class GradingError extends Error {
   constructor(
@@ -253,10 +263,14 @@ export function createGradingModule(
 
         if (auditAction === "regraded") {
           await transaction.evaluation.updateMany({
-            where: { submissionId: command.submissionId },
+            where: {
+              submissionId: command.submissionId,
+              status: "regrading",
+            },
             data: {
               status: "failed",
               errorMessage: safeFailureMessage(error),
+              version: { increment: 1 },
             },
           });
         }
@@ -303,9 +317,15 @@ export function createGradingModule(
       );
     }
 
+    const expectedVersion = command.expectedVersion ?? evaluation.version;
+
     if (command.kind === "regrade") {
-      await database.evaluation.update({
-        where: { id: evaluation.id },
+      const claimed = await database.evaluation.updateMany({
+        where: {
+          id: evaluation.id,
+          version: expectedVersion,
+          status: { in: [...editableEvaluationStatuses] },
+        },
         data: {
           status: "regrading",
           reviewedById: teacher.id,
@@ -313,6 +333,12 @@ export function createGradingModule(
           errorMessage: null,
         },
       });
+      if (claimed.count === 0) {
+        throw new GradingError(
+          "conflict",
+          "Evaluation was updated by another reviewer or is already being regraded.",
+        );
+      }
 
       return evaluateSubmission({
         submissionId: evaluation.submissionId,
@@ -323,18 +349,67 @@ export function createGradingModule(
 
     return database.$transaction(async (transaction) => {
       if (command.kind === "confirm") {
-        const savedEvaluation = await transaction.evaluation.update({
-          where: { id: evaluation.id },
+        if (evaluation.status === "confirmed") {
+          if (expectedVersion !== evaluation.version) {
+            throw new GradingError(
+              "conflict",
+              "Evaluation was updated by another reviewer.",
+            );
+          }
+          const savedEvaluation = await transaction.evaluation.findFirst({
+            where: {
+              id: evaluation.id,
+              version: expectedVersion,
+              status: "confirmed",
+            },
+            include: {
+              reviewedBy: {
+                select: { id: true, username: true, displayName: true },
+              },
+            },
+          });
+          if (!savedEvaluation) {
+            throw new GradingError(
+              "conflict",
+              "Evaluation was updated by another reviewer.",
+            );
+          }
+          return { evaluation: savedEvaluation, agent: undefined };
+        }
+
+        const updated = await transaction.evaluation.updateMany({
+          where: {
+            id: evaluation.id,
+            version: expectedVersion,
+            status: { in: [...confirmableEvaluationStatuses] },
+          },
           data: {
             status: "confirmed",
+            version: { increment: 1 },
             reviewedById: teacher.id,
             reviewedAt: new Date(),
+            errorMessage: null,
           },
+        });
+        if (updated.count === 0) {
+          throw new GradingError(
+            "conflict",
+            "Evaluation was updated by another reviewer or cannot be confirmed in its current state.",
+          );
+        }
+
+        const savedEvaluation = await transaction.evaluation.findUniqueOrThrow({
+          where: { id: evaluation.id },
           include: {
             reviewedBy: {
               select: { id: true, username: true, displayName: true },
             },
           },
+        });
+
+        await transaction.submission.update({
+          where: { id: savedEvaluation.submissionId },
+          data: { status: "evaluated" },
         });
 
         await transaction.evaluationAudit.create({
@@ -375,44 +450,38 @@ export function createGradingModule(
         version: { increment: 1 },
         reviewedById: teacher.id,
         reviewedAt: new Date(),
+        errorMessage: null,
       };
 
-      let savedEvaluation;
-      if (command.expectedVersion !== undefined) {
-        const updated = await transaction.evaluation.updateMany({
-          where: {
-            id: evaluation.id,
-            version: command.expectedVersion,
-          },
-          data,
-        });
+      const updated = await transaction.evaluation.updateMany({
+        where: {
+          id: evaluation.id,
+          version: expectedVersion,
+          status: { in: [...editableEvaluationStatuses] },
+        },
+        data,
+      });
 
-        if (updated.count === 0) {
-          throw new GradingError(
-            "conflict",
-            "Evaluation was updated by another reviewer.",
-          );
-        }
-
-        savedEvaluation = await transaction.evaluation.findUniqueOrThrow({
-          where: { id: evaluation.id },
-          include: {
-            reviewedBy: {
-              select: { id: true, username: true, displayName: true },
-            },
-          },
-        });
-      } else {
-        savedEvaluation = await transaction.evaluation.update({
-          where: { id: evaluation.id },
-          data,
-          include: {
-            reviewedBy: {
-              select: { id: true, username: true, displayName: true },
-            },
-          },
-        });
+      if (updated.count === 0) {
+        throw new GradingError(
+          "conflict",
+          "Evaluation was updated by another reviewer or is being regraded.",
+        );
       }
+
+      const savedEvaluation = await transaction.evaluation.findUniqueOrThrow({
+        where: { id: evaluation.id },
+        include: {
+          reviewedBy: {
+            select: { id: true, username: true, displayName: true },
+          },
+        },
+      });
+
+      await transaction.submission.update({
+        where: { id: savedEvaluation.submissionId },
+        data: { status: "evaluated" },
+      });
 
       await transaction.evaluationAudit.create({
         data: {

@@ -4,6 +4,26 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-06
+
+### Added
+
+- 真实 Chromium 开发前端 smoke，并纳入统一验证入口；
+- Evaluation 确认、失败与并发重评的状态表征测试。
+
+### Changed
+
+- 修复非 root 开发容器中 Vite 缓存目录不可写导致的空白页；
+- 确认、修改和重评统一使用状态与版本条件原子竞争，Mattermost 交互签名绑定 Evaluation 版本；
+- Assignment、Submission、Evaluation 与 Audit 响应改为显式公开字段投影；
+- 修正页面语言、标题、描述、主题色和站点图标；
+- 同步 README 与验证记录中的自动测试数字。
+
+### Security
+
+- 未声明的新数据库字段默认不会进入公开 DTO 或历史审计快照；
+- 并发重评只有一个请求能取得 Agent 调用权，失败终态会推进版本并使旧写入失效。
+
 ## [0.1.0] - 2026-08-05
 
 ### Added
