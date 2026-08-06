@@ -179,7 +179,7 @@ try {
     Set-DotEnvValue -Name "AUTH_SECRET" -Value (New-RandomSecret -ByteCount 32)
     Set-DotEnvValue -Name "BOOTSTRAP_TOKEN" -Value (New-RandomSecret -ByteCount 24)
     Write-Host "Created .env from .env.example." -ForegroundColor Yellow
-    Write-Host "Generated local AUTH_SECRET and BOOTSTRAP_TOKEN in .env." -ForegroundColor Yellow
+    Write-Host "Generated local database password, AUTH_SECRET, and BOOTSTRAP_TOKEN in .env." -ForegroundColor Yellow
     Write-Warning "Configure MATTERMOST_SLASH_TOKEN before testing /ds commands."
   }
 
@@ -234,6 +234,8 @@ try {
   Write-Host "Agent    : http://localhost:$agentPort/health"
   Write-Host ""
   Write-Host "Prisma migrations were applied automatically. Seed data was not loaded."
+  Write-Host "First run: create the platform administrator with:" -ForegroundColor Yellow
+  Write-Host "  powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-admin.ps1"
   Write-Host "Developers may load test data explicitly with: docker compose exec backend npm run prisma:seed"
 }
 finally {

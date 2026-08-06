@@ -1,0 +1,106 @@
+﻿.account-admin {
+  position: relative;
+  align-self: end;
+}
+
+.account-admin > summary {
+  min-height: 44px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 760;
+  list-style: none;
+}
+
+.account-admin > summary::-webkit-details-marker {
+  display: none;
+}
+
+.account-admin > summary:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.account-admin__panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(760px, calc(100vw - 40px));
+  max-height: min(620px, calc(100vh - 120px));
+  padding: 20px;
+  overflow: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.account-admin__heading,
+.account-list li,
+.account-list form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-admin__heading {
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.account-admin__heading > div,
+.account-list__identity {
+  display: grid;
+  gap: 3px;
+}
+
+.account-admin__heading span,
+.account-list__identity span,
+.account-list__identity small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.account-admin__message {
+  color: var(--success);
+  font-size: 12px;
+}
+
+.account-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.account-list li {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(270px, 1.4fr) auto;
+  padding: 13px 0;
+  border-top: 1px solid var(--line);
+}
+
+.account-list form input {
+  min-height: 38px;
+}
+
+.account-list button {
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.account-list button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}

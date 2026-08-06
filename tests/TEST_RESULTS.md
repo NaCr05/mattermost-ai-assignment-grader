@@ -12,7 +12,8 @@
 
 | 验证面 | 结果 |
 |---|---:|
-| 开发前端 Chromium smoke | 1/1 |
+| 开发前端 Chromium smoke | 学生路由、教师工作台、评估历史均通过 |
+| 首位管理员 bootstrap 与首次登录 | 通过，输出不含 Token/密码 |
 | Backend 单元测试 | 16/16 |
 | Backend PostgreSQL + Agent 集成测试 | 20/20 |
 | Frontend 模块与 Workspace 测试 | 11/11 |
@@ -27,6 +28,7 @@
 ## 行为与安全断言
 
 - 登录失败达到阈值后返回 `429`，成功登录可重置账号维度计数。
+- 全新空库可通过交互式脚本创建首位教师并完成首次登录；脚本没有默认密码，也不会输出 bootstrap Token 或密码。
 - 开发前端在非 root 容器内完成 Vite 依赖转换，真实 Chromium 可挂载应用，HTML 语言、标题和描述符合公开元数据契约，浏览器无控制台错误。
 - 撤销全部会话后，先前签发的 Cookie 均失效。
 - 管理员重置密码或禁用账号后目标用户旧 Cookie 失效，禁用账号无法通过 Web 或 Mattermost 继续操作，关键操作写入 `AuthAudit`。

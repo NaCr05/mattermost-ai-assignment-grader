@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added an interactive, no-default-credential administrator bootstrap helper and verification of the first-login loop.
+- Added focused getting-started, deployment, Mattermost, architecture, and Agent guides.
+- Added anonymous synthetic teacher-workspace and EvaluationAudit screenshots for the repository entry page.
+
+### Changed
+
+- Reworked README into a concise product entry and documentation router.
+- Clarified the current Mattermost-plus-Web workflow and the long-term Web-first product direction.
+- Split frontend session routing, teacher workspace, student workspace seam, review queue, submission card, and stylesheet responsibilities.
+
 ## [0.1.1] - 2026-08-06
 
 ### Added

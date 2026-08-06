@@ -24,7 +24,7 @@ export type EditDraft = {
   correctnessComment: string;
 };
 
-type ReviewWorkspaceOptions = {
+export type ReviewWorkspaceOptions = {
   gateway?: GradingGateway;
 };
 
@@ -358,3 +358,5 @@ export function useReviewWorkspace({
     },
   };
 }
+
+export type ReviewWorkspaceController = ReturnType<typeof useReviewWorkspace>;

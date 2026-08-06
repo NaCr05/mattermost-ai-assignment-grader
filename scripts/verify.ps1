@@ -253,6 +253,59 @@ try {
   Assert-EmptyMigratedDatabase -ComposeArguments $devCompose -Mode "Development" `
     -ExpectedMigrationCount $expectedMigrationCount
 
+  $bootstrapUsername = "verify-admin-$suffix"
+  $bootstrapPasswordText = "verify-admin-password-$suffix"
+  $bootstrapPassword = ConvertTo-SecureString $bootstrapPasswordText -AsPlainText -Force
+  $bootstrapOutput = & (Join-Path $projectRoot "scripts/bootstrap-admin.ps1") `
+    -EnvironmentFile "" `
+    -BackendUrl "http://127.0.0.1:$($environmentValues.BACKEND_PORT)" `
+    -FrontendUrl "http://127.0.0.1:$($environmentValues.FRONTEND_PORT)" `
+    -Username $bootstrapUsername `
+    -DisplayName "Verification Administrator" `
+    -Password $bootstrapPassword `
+    -ConfirmPassword $bootstrapPassword *>&1 | Out-String
+  if (
+    $bootstrapOutput.Contains($environmentValues.BOOTSTRAP_TOKEN) -or
+    $bootstrapOutput.Contains($bootstrapPasswordText)
+  ) {
+    throw "Bootstrap administrator helper exposed a credential in its output."
+  }
+
+  $loginResponse = Invoke-RestMethod -Method Post `
+    -Uri "http://127.0.0.1:$($environmentValues.BACKEND_PORT)/auth/login" `
+    -ContentType "application/json" `
+    -Body (@{
+      username = $bootstrapUsername
+      password = $bootstrapPasswordText
+    } | ConvertTo-Json -Compress) `
+    -TimeoutSec 30
+  if (
+    $loginResponse.user.username -ne $bootstrapUsername -or
+    $loginResponse.user.role -ne "teacher"
+  ) {
+    throw "Bootstrap administrator could not complete the first-login loop."
+  }
+
+  $bootstrapCleanupSql = @"
+DELETE FROM "AuthAudit"
+WHERE "actorId" IN (SELECT "id" FROM "User" WHERE "username" = '$bootstrapUsername')
+   OR "targetUserId" IN (SELECT "id" FROM "User" WHERE "username" = '$bootstrapUsername');
+DELETE FROM "User" WHERE "username" = '$bootstrapUsername';
+"@
+  Write-Host "`n==> Cleaning isolated bootstrap verification account"
+  $bootstrapCleanupSql | & docker @($devCompose + @(
+      "exec", "-T", "db", "psql", "-v", "ON_ERROR_STOP=1",
+      "-U", $environmentValues.POSTGRES_USER,
+      "-d", $environmentValues.POSTGRES_DB
+    ))
+  if ($LASTEXITCODE -ne 0) {
+    throw "Cleaning isolated bootstrap verification account failed."
+  }
+  $bootstrapPasswordText = $null
+  $bootstrapPassword = $null
+  Assert-EmptyMigratedDatabase -ComposeArguments $devCompose -Mode "Development after bootstrap verification" `
+    -ExpectedMigrationCount $expectedMigrationCount
+
   if (-not $SkipProduction) {
     $prodUp = $prodCompose + @("up", "-d", "--wait", "--wait-timeout", [string]$TimeoutSeconds)
     if (-not $NoBuild) { $prodUp += "--build" }
