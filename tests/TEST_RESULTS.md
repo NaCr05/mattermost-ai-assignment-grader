@@ -1,6 +1,6 @@
 # TIDE 平台验证记录
 
-> 验证日期：2026-08-05
+> 验证日期：2026-08-06
 >
 > 验证入口：`./scripts/verify.ps1`
 >
@@ -12,25 +12,27 @@
 
 | 验证面 | 结果 |
 |---|---:|
+| 开发前端 Chromium smoke | 1/1 |
 | Backend 单元测试 | 16/16 |
-| Backend PostgreSQL + Agent 集成测试 | 18/18 |
-| Frontend 模块与 Workspace 测试 | 10/10 |
+| Backend PostgreSQL + Agent 集成测试 | 20/20 |
+| Frontend 模块与 Workspace 测试 | 11/11 |
 | Agent 模块测试 | 8/8 |
 | 合成端到端验收 | 6/6 |
 | Backend TypeScript、Frontend lint、Python Ruff | 通过 |
 | Backend 生产 bundle、Frontend 静态构建 | 通过 |
-| npm audit（Backend、Frontend） | 0 个已知漏洞 |
+| npm audit（Backend、Frontend、Browser smoke） | 0 个已知漏洞 |
 | pip-audit（Agent） | 0 个已知漏洞 |
-| Gitleaks 工作树扫描 | 未发现敏感信息 |
-| Trivy 依赖、Secret、Dockerfile 扫描 | 0 个高危/严重发现 |
+| Git 历史与 Trivy Security workflow | v0.1.1 推送后复验 |
 
 ## 行为与安全断言
 
 - 登录失败达到阈值后返回 `429`，成功登录可重置账号维度计数。
+- 开发前端在非 root 容器内完成 Vite 依赖转换，真实 Chromium 可挂载应用，HTML 语言、标题和描述符合公开元数据契约，浏览器无控制台错误。
 - 撤销全部会话后，先前签发的 Cookie 均失效。
 - 管理员重置密码或禁用账号后目标用户旧 Cookie 失效，禁用账号无法通过 Web 或 Mattermost 继续操作，关键操作写入 `AuthAudit`。
 - 身份来自服务端会话，CSRF、教师归属和学生本人访问限制保持生效。
-- Agent 请求 ID、模型、Prompt 版本、耗时、Token 和估算成本持久化到 Evaluation，公开评分与审计 DTO 不暴露这些内部元数据或原始模型输出。
+- Agent 请求 ID、模型、Prompt 版本、耗时、Token 和估算成本持久化到 Evaluation；Assignment、Submission、Evaluation 和 Audit 采用显式允许字段投影，不暴露这些内部元数据、原始模型输出或未来未声明字段。
+- Evaluation 确认会推进版本；确认、修改和重评通过状态与版本原子竞争，并发重评只有一个请求调用 Agent；重评失败与教师恢复后的 Submission/Evaluation 状态保持一致。
 - Pascal 执行默认关闭；关闭时不会调用 `exec`。
 - 生产模式仅 Caddy 发布 HTTP/HTTPS；Frontend/Nginx、Backend、Agent 与 PostgreSQL 仅在容器网络内可达。
 - 五个生产容器均以非 root UID 运行，Pascal 执行仍默认关闭。

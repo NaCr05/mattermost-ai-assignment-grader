@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import test from "node:test";
 import { createApp } from "../src/app";
 import { hashPassword } from "../src/auth/password";
+import { createMattermostSigner } from "../src/mattermost/signing";
 import { pool, prisma } from "../src/prisma";
 
 type ApiResult = { response: Response; body: any };
@@ -86,6 +87,7 @@ test("TIDE grading API authenticated workflow", async (suite) => {
   let assignmentId: string | undefined;
   let submissionId: string | undefined;
   let evaluationId: string | undefined;
+  let evaluationVersion: number | undefined;
 
   async function request(path: string, init: RequestInit = {}, session?: BrowserSession): Promise<ApiResult> {
     const headers = new Headers(init.headers);
@@ -228,6 +230,7 @@ test("TIDE grading API authenticated workflow", async (suite) => {
       assert.equal(evaluated.response.status, 200);
       assertEvaluationContract(evaluated.body.evaluation);
       evaluationId = evaluated.body.evaluation.id;
+      evaluationVersion = evaluated.body.evaluation.version;
 
       const reads = await Promise.all([
         request(`/submissions/${submissionId}`, {}, studentSession),
@@ -251,17 +254,21 @@ test("TIDE grading API authenticated workflow", async (suite) => {
       const confirm = await request(`/evaluations/${evaluationId}/confirm`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ expectedVersion: evaluationVersion }),
       }, otherTeacherSession);
       assert.equal(confirm.response.status, 403);
     });
 
     await suite.test("owner can regrade, modify with optimistic locking and confirm", async () => {
       assert.ok(evaluationId);
+      assert.ok(evaluationVersion);
       const regraded = await request(`/evaluations/${evaluationId}/regrade`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ reviewedById: otherTeacher.id }),
+        body: JSON.stringify({
+          reviewedById: otherTeacher.id,
+          expectedVersion: evaluationVersion,
+        }),
       }, teacherSession);
       assert.equal(regraded.response.status, 200);
       const regradedVersion = regraded.body.evaluation.version;
@@ -278,6 +285,7 @@ test("TIDE grading API authenticated workflow", async (suite) => {
       }, teacherSession);
       assert.equal(modified.response.status, 200);
       assert.equal(modified.body.reviewedById, teacher.id);
+      const modifiedVersion = modified.body.version;
       const stale = await request(`/evaluations/${evaluationId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -287,10 +295,12 @@ test("TIDE grading API authenticated workflow", async (suite) => {
       const confirmed = await request(`/evaluations/${evaluationId}/confirm`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ expectedVersion: modifiedVersion }),
       }, teacherSession);
       assert.equal(confirmed.response.status, 200);
       assert.equal(confirmed.body.status, "confirmed");
+      assert.equal(confirmed.body.version, modifiedVersion + 1);
+      evaluationVersion = confirmed.body.version;
     });
 
     await suite.test("Mattermost keeps token, signed action and user mapping behavior", async () => {
@@ -311,6 +321,39 @@ test("TIDE grading API authenticated workflow", async (suite) => {
         (action: { integration: { context: { action: string } } }) => action.integration.context.action === "confirm",
       );
       assert.match(confirmAction.integration.context.signature, /^[a-f0-9]{64}$/);
+      const staleContext = {
+        ...confirmAction.integration.context,
+        version: confirmAction.integration.context.version - 1,
+      };
+      staleContext.signature = createMattermostSigner(slashToken).sign(
+        staleContext.action,
+        staleContext.evaluationId,
+        staleContext.submissionId,
+        staleContext.version,
+      );
+      const staleAction = await request("/mattermost/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          user_id: mattermostUserId,
+          user_name: teacher.username,
+          context: staleContext,
+        }),
+      });
+      assert.equal(staleAction.response.status, 409);
+      const rejectedVersion = await request("/mattermost/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          user_id: mattermostUserId,
+          user_name: teacher.username,
+          context: {
+            ...confirmAction.integration.context,
+            version: confirmAction.integration.context.version + 1,
+          },
+        }),
+      });
+      assert.equal(rejectedVersion.response.status, 403);
       const rejected = await request("/mattermost/actions", {
         method: "POST",
         headers: { "content-type": "application/json" },

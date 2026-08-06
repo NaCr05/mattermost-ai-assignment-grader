@@ -247,7 +247,7 @@ export function useReviewWorkspace({
   function confirmEvaluation(evaluation: Evaluation) {
     return runAction(
       evaluation.id,
-      () => gateway.confirmEvaluation(evaluation.id),
+      () => gateway.confirmEvaluation(evaluation.id, evaluation.version),
       "评测结果已确认。",
     );
   }
@@ -255,7 +255,7 @@ export function useReviewWorkspace({
   function regradeEvaluation(evaluation: Evaluation) {
     return runAction(
       evaluation.id,
-      () => gateway.regradeEvaluation(evaluation.id),
+      () => gateway.regradeEvaluation(evaluation.id, evaluation.version),
       "Agent 已完成重新评测，版本号已更新。",
     );
   }

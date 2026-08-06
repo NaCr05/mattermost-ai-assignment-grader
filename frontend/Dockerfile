@@ -10,8 +10,8 @@ FROM dependencies AS development
 ENV NODE_ENV=development
 
 COPY --chown=node:node . .
-RUN mkdir -p /app/node_modules/.tmp \
-    && chown node:node /app /app/node_modules/.tmp
+RUN mkdir -p /app/node_modules/.tmp /app/node_modules/.vite \
+    && chown node:node /app /app/node_modules/.tmp /app/node_modules/.vite
 
 USER node
 

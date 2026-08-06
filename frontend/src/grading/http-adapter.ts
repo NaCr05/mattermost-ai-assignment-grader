@@ -75,19 +75,19 @@ export function createHttpGradingGateway(
       return send(`/submissions/${submissionId}/evaluate`, { method: "POST" });
     },
 
-    confirmEvaluation(evaluationId) {
+    confirmEvaluation(evaluationId, expectedVersion) {
       return send(`/evaluations/${evaluationId}/confirm`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ expectedVersion }),
       });
     },
 
-    regradeEvaluation(evaluationId) {
+    regradeEvaluation(evaluationId, expectedVersion) {
       return send(`/evaluations/${evaluationId}/regrade`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ expectedVersion }),
       });
     },
 

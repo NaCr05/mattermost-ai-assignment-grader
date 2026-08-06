@@ -1,6 +1,6 @@
 {
   "name": "tide-grading-backend",
-  "version": "1.0.0",
+  "version": "0.1.1",
   "description": "Backend for the Mattermost AI-assisted assignment grading platform",
   "license": "ISC",
   "author": "",

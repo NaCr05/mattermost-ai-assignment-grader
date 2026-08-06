@@ -19,6 +19,7 @@ export type MattermostAttachment = {
         action: MattermostInteractiveAction;
         evaluationId: string;
         submissionId: string;
+        version: number;
         signature: string;
       };
     };
@@ -71,7 +72,13 @@ export function buildMattermostEvaluationAttachment(
         action,
         evaluationId: input.evaluation.id,
         submissionId: input.submissionId,
-        signature: signer.sign(action, input.evaluation.id, input.submissionId),
+        version: input.evaluation.version,
+        signature: signer.sign(
+          action,
+          input.evaluation.id,
+          input.submissionId,
+          input.evaluation.version,
+        ),
       },
     },
   });

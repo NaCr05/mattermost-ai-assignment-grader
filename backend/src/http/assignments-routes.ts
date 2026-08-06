@@ -1,5 +1,6 @@
 import express from "express";
 import type { CurrentUser } from "../auth/http-adapter";
+import { toAssignmentDto } from "../grading/dto";
 import type { prisma as defaultPrisma } from "../prisma";
 import { isNonEmptyString, sendServerError } from "./error-mapping";
 
@@ -41,7 +42,7 @@ export function createAssignmentsRouter(input: {
         },
         include: includeSummary,
       });
-      response.status(201).json(assignment);
+      response.status(201).json(toAssignmentDto(assignment));
     } catch (error) {
       sendServerError(response, "Failed to publish assignment", error);
     }
@@ -55,7 +56,7 @@ export function createAssignmentsRouter(input: {
         include: includeSummary,
         orderBy: { createdAt: "desc" },
       });
-      response.json(assignments);
+      response.json(assignments.map(toAssignmentDto));
     } catch (error) {
       sendServerError(response, "Failed to list assignments", error);
     }
@@ -75,7 +76,7 @@ export function createAssignmentsRouter(input: {
       ) {
         return response.status(403).json({ message: "Assignment access denied" });
       }
-      response.json(assignment);
+      response.json(toAssignmentDto(assignment));
     } catch (error) {
       sendServerError(response, "Failed to get assignment", error);
     }

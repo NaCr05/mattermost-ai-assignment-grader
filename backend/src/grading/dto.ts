@@ -1,3 +1,24 @@
+type PublicUserSource = {
+  id: string;
+  username: string;
+  displayName: string;
+  role?: string;
+};
+
+type PublicAssignmentSource = {
+  id: string;
+  title: string;
+  question: string;
+  deadline: Date | string;
+  instructions: string | null;
+  status: string;
+  createdById: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  createdBy?: PublicUserSource;
+  _count?: { submissions: number };
+};
+
 type PublicEvaluationSource = {
   id: string;
   submissionId: string;
@@ -15,8 +36,63 @@ type PublicEvaluationSource = {
   reviewedAt: Date | string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
-  reviewedBy?: unknown;
+  reviewedBy?: PublicUserSource | null;
 };
+
+type PublicSubmissionSource = {
+  id: string;
+  assignmentId: string;
+  studentId: string;
+  answer: string;
+  status: string;
+  submittedAt: Date | string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  assignment?: PublicAssignmentSource;
+  student?: PublicUserSource;
+  evaluation?: PublicEvaluationSource | null;
+};
+
+type PublicEvaluationAuditSource = {
+  id: string;
+  evaluationId: string | null;
+  submissionId: string;
+  action: string;
+  version: number;
+  snapshot: unknown;
+  actorId: string | null;
+  actor?: PublicUserSource | null;
+  createdAt: Date | string;
+};
+
+function toPublicUserDto(user: PublicUserSource) {
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    ...(user.role !== undefined ? { role: user.role } : {}),
+  };
+}
+
+export function toAssignmentDto(assignment: PublicAssignmentSource) {
+  return {
+    id: assignment.id,
+    title: assignment.title,
+    question: assignment.question,
+    deadline: assignment.deadline,
+    instructions: assignment.instructions,
+    status: assignment.status,
+    createdById: assignment.createdById,
+    ...(assignment.createdBy !== undefined
+      ? { createdBy: toPublicUserDto(assignment.createdBy) }
+      : {}),
+    ...(assignment._count !== undefined
+      ? { _count: { submissions: assignment._count.submissions } }
+      : {}),
+    createdAt: assignment.createdAt,
+    updatedAt: assignment.updatedAt,
+  };
+}
 
 export function toEvaluationDto(evaluation: PublicEvaluationSource) {
   return {
@@ -35,65 +111,126 @@ export function toEvaluationDto(evaluation: PublicEvaluationSource) {
     reviewedById: evaluation.reviewedById,
     reviewedAt: evaluation.reviewedAt,
     ...(evaluation.reviewedBy !== undefined
-      ? { reviewedBy: evaluation.reviewedBy }
+      ? {
+          reviewedBy: evaluation.reviewedBy
+            ? toPublicUserDto(evaluation.reviewedBy)
+            : null,
+        }
       : {}),
     createdAt: evaluation.createdAt,
     updatedAt: evaluation.updatedAt,
   };
 }
 
-export function toSubmissionDto<T extends { evaluation?: PublicEvaluationSource | null }>(
-  submission: T,
-) {
-  const { evaluation, ...publicSubmission } = submission;
+export function toSubmissionDto(submission: PublicSubmissionSource) {
   return {
-    ...publicSubmission,
-    ...(evaluation !== undefined
-      ? { evaluation: evaluation ? toEvaluationDto(evaluation) : null }
+    id: submission.id,
+    assignmentId: submission.assignmentId,
+    studentId: submission.studentId,
+    answer: submission.answer,
+    status: submission.status,
+    submittedAt: submission.submittedAt,
+    ...(submission.assignment !== undefined
+      ? { assignment: toAssignmentDto(submission.assignment) }
       : {}),
+    ...(submission.student !== undefined
+      ? { student: toPublicUserDto(submission.student) }
+      : {}),
+    ...(submission.evaluation !== undefined
+      ? {
+          evaluation: submission.evaluation
+            ? toEvaluationDto(submission.evaluation)
+            : null,
+        }
+      : {}),
+    createdAt: submission.createdAt,
+    updatedAt: submission.updatedAt,
   };
 }
 
-function redactSnapshot(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(redactSnapshot);
-  }
-
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-
-  const redacted: Record<string, unknown> = {};
-  for (const [key, nestedValue] of Object.entries(value)) {
-    if ([
-      "agentRawOutput",
-      "errorMessage",
-      "raw_output",
-      "agentProvider",
-      "agentRequestId",
-      "agentAttempts",
-      "modelName",
-      "promptVersion",
-      "agentDurationMs",
-      "inputTokens",
-      "outputTokens",
-      "totalTokens",
-      "estimatedCostUsd",
-    ].includes(key)) {
-      continue;
-    }
-    redacted[key] = redactSnapshot(nestedValue);
-  }
-  return redacted;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function toEvaluationAuditDto<T extends {
-  agentRawOutput?: unknown;
-  snapshot: unknown;
-}>(audit: T) {
-  const { agentRawOutput: _agentRawOutput, snapshot, ...publicAudit } = audit;
+const evaluationSnapshotFields = [
+  "id",
+  "submissionId",
+  "completenessLevel",
+  "completenessComment",
+  "correctnessLevel",
+  "correctnessComment",
+  "mainProblems",
+  "suggestions",
+  "score",
+  "grade",
+  "status",
+  "version",
+  "reviewedById",
+  "reviewedAt",
+  "createdAt",
+  "updatedAt",
+] as const;
+
+function projectEvaluationSnapshot(value: unknown) {
+  if (!isRecord(value)) return {};
+
+  const projected: Record<string, unknown> = {};
+  for (const field of evaluationSnapshotFields) {
+    if (field in value) projected[field] = value[field];
+  }
+  if (isRecord(value.reviewedBy)) {
+    const { id, username, displayName } = value.reviewedBy;
+    if (
+      typeof id === "string" &&
+      typeof username === "string" &&
+      typeof displayName === "string"
+    ) {
+      projected.reviewedBy = toPublicUserDto({ id, username, displayName });
+    }
+  } else if (value.reviewedBy === null) {
+    projected.reviewedBy = null;
+  }
+  return projected;
+}
+
+function projectAuditSnapshot(value: unknown): unknown {
+  if (!isRecord(value)) return {};
+
+  if (!("evaluation" in value)) {
+    return projectEvaluationSnapshot(value);
+  }
+
+  const projected: Record<string, unknown> = {
+    evaluation: projectEvaluationSnapshot(value.evaluation),
+  };
+  if (typeof value.baselineImported === "boolean") {
+    projected.baselineImported = value.baselineImported;
+  }
+  if (isRecord(value.agent)) {
+    const agent: Record<string, unknown> = {};
+    if (typeof value.agent.provider === "string") {
+      agent.provider = value.agent.provider;
+    }
+    if (typeof value.agent.attempts === "number") {
+      agent.attempts = value.agent.attempts;
+    }
+    projected.agent = agent;
+  }
+  return projected;
+}
+
+export function toEvaluationAuditDto(audit: PublicEvaluationAuditSource) {
   return {
-    ...publicAudit,
-    snapshot: redactSnapshot(snapshot),
+    id: audit.id,
+    evaluationId: audit.evaluationId,
+    submissionId: audit.submissionId,
+    action: audit.action,
+    version: audit.version,
+    snapshot: projectAuditSnapshot(audit.snapshot),
+    actorId: audit.actorId,
+    ...(audit.actor !== undefined
+      ? { actor: audit.actor ? toPublicUserDto(audit.actor) : null }
+      : {}),
+    createdAt: audit.createdAt,
   };
 }

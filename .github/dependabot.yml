@@ -16,6 +16,14 @@ updates:
       frontend-dependencies:
         patterns: ["*"]
 
+  - package-ecosystem: npm
+    directory: /tests/browser-smoke
+    schedule:
+      interval: weekly
+    groups:
+      browser-smoke-dependencies:
+        patterns: ["*"]
+
   - package-ecosystem: pip
     directory: /agent
     schedule:
@@ -49,6 +57,11 @@ updates:
 
   - package-ecosystem: docker
     directory: /deploy/caddy
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /tests/browser-smoke
     schedule:
       interval: weekly
 

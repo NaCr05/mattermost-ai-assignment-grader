@@ -104,4 +104,23 @@ describe("review workspace state", () => {
     await act(async () => { oldQueue.resolve(summary("assignment-a")); });
     expect(result.current.queue.summary?.assignment.id).toBe("assignment-b");
   });
+
+  it("passes the visible evaluation version to confirm and regrade commands", async () => {
+    const confirmEvaluation = vi.fn().mockResolvedValue(undefined);
+    const regradeEvaluation = vi.fn().mockResolvedValue(undefined);
+    const gateway = createFakeGradingGateway({
+      listAssignments: async () => [assignments[0]],
+      loadSubmissionSummary: async () => summary("assignment-a"),
+      confirmEvaluation,
+      regradeEvaluation,
+    });
+    const { result } = renderHook(() => useReviewWorkspace({ gateway }));
+    await waitFor(() => expect(result.current.queue.summary?.count).toBe(1));
+
+    await act(async () => { await result.current.editor.confirm(evaluation); });
+    await act(async () => { await result.current.editor.regrade(evaluation); });
+
+    expect(confirmEvaluation).toHaveBeenCalledWith(evaluation.id, evaluation.version);
+    expect(regradeEvaluation).toHaveBeenCalledWith(evaluation.id, evaluation.version);
+  });
 });

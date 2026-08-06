@@ -1,0 +1,11 @@
+services:
+  browser-smoke:
+    build:
+      context: ./tests/browser-smoke
+      dockerfile: Dockerfile
+    environment:
+      FRONTEND_URL: http://frontend:5173
+    depends_on:
+      frontend:
+        condition: service_healthy
+    profiles: ["test"]

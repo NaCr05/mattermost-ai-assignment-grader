@@ -442,9 +442,9 @@ function ReviewWorkspace(input: {
                             </>
                           ) : (
                             <>
-                              <button className="button" disabled={isBusy || evaluation.status === "confirmed"} onClick={() => void editor.confirm(evaluation)}>确认评估</button>
-                              <button className="button button--secondary" disabled={isBusy} onClick={() => editor.begin(evaluation)}>修改结果</button>
-                              <button className="button button--ghost" disabled={isBusy} onClick={() => void editor.regrade(evaluation)}>{isBusy ? "处理中…" : "重新评估"}</button>
+                              <button className="button" disabled={isBusy || evaluation.status === "confirmed" || evaluation.status === "regrading"} onClick={() => void editor.confirm(evaluation)}>确认评估</button>
+                              <button className="button button--secondary" disabled={isBusy || evaluation.status === "regrading"} onClick={() => editor.begin(evaluation)}>修改结果</button>
+                              <button className="button button--ghost" disabled={isBusy || evaluation.status === "regrading"} onClick={() => void editor.regrade(evaluation)}>{isBusy || evaluation.status === "regrading" ? "处理中…" : "重新评估"}</button>
                             </>
                           )}
                           <button
