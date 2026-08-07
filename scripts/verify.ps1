@@ -18,6 +18,8 @@ $prodProject = "tide-grader-verify-prod-$suffix"
 $devStarted = $false
 $prodStarted = $false
 $verificationBackupPath = $null
+$linuxVerificationBackupPath = $null
+$linuxVerificationBackupDirectory = $null
 
 $environmentValues = [ordered]@{
   POSTGRES_USER = "tide_verify"
@@ -42,6 +44,12 @@ $environmentValues = [ordered]@{
   MATTERMOST_ACTION_URL = ""
   LOG_HEALTH_REQUESTS = "false"
   LOG_ERROR_DETAILS = "false"
+  LOG_MAX_SIZE = "10m"
+  LOG_MAX_FILES = "5"
+  BACKEND_IMAGE = "local/tide-grader-backend:$suffix"
+  AGENT_IMAGE = "local/tide-grader-agent:$suffix"
+  FRONTEND_IMAGE = "local/tide-grader-frontend:$suffix"
+  CADDY_IMAGE = "local/tide-grader-caddy:$suffix"
   SITE_ADDRESS = "http://"
 }
 $environmentValues.FRONTEND_ORIGIN = "http://127.0.0.1:$($environmentValues.FRONTEND_PORT)"
@@ -157,6 +165,7 @@ SELECT (SELECT COUNT(*) FROM "User"),
 
 try {
   Set-Location $projectRoot
+  & (Join-Path $projectRoot "scripts/check-doc-links.ps1")
   if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     throw "Docker CLI was not found."
   }
@@ -175,7 +184,8 @@ try {
   )
   $prodCompose = @(
     "compose", "-p", $prodProject,
-    "-f", "compose.base.yml", "-f", "docker-compose.prod.yml"
+    "-f", "compose.base.yml", "-f", "docker-compose.prod.yml",
+    "-f", "docker-compose.release-build.yml"
   )
   $smokeCompose = @(
     "compose", "-p", $devProject,
@@ -320,6 +330,26 @@ DELETE FROM "User" WHERE "username" = '$bootstrapUsername';
       }
     }
 
+    foreach ($service in @("db", "backend", "agent", "frontend", "caddy")) {
+      $containerId = (& docker @($prodCompose + @("ps", "-q", $service)) | Out-String).Trim()
+      if ($LASTEXITCODE -ne 0 -or -not $containerId) {
+        throw "Production service $service could not be inspected for runtime policy."
+      }
+      $containerInspection = (& docker inspect $containerId | Out-String) | ConvertFrom-Json
+      $restartPolicy = $containerInspection[0].HostConfig.RestartPolicy.Name
+      if ($restartPolicy -ne "unless-stopped") {
+        throw "Production service $service restart policy was '$restartPolicy'."
+      }
+      $logConfig = $containerInspection[0].HostConfig.LogConfig
+      if (
+        $logConfig.Type -ne "json-file" -or
+        $logConfig.Config.'max-size' -ne $environmentValues.LOG_MAX_SIZE -or
+        $logConfig.Config.'max-file' -ne $environmentValues.LOG_MAX_FILES
+      ) {
+        throw "Production service $service does not have bounded JSON log rotation."
+      }
+    }
+
     $privateProductionPorts = @{
       db = "5432/tcp"
       backend = "3000/tcp"
@@ -375,8 +405,10 @@ DELETE FROM "User" WHERE "username" = '$bootstrapUsername';
     $verificationBackupPath = $backupPath
     $restoreDatabase = "tide_restore_$suffix"
     & (Join-Path $projectRoot "scripts/backup.ps1") -EnvironmentFile "" `
+      -ReleaseEnvironmentFile "" `
       -ProjectName $prodProject -OutputPath $backupPath
     & (Join-Path $projectRoot "scripts/restore.ps1") -EnvironmentFile "" `
+      -ReleaseEnvironmentFile "" `
       -ProjectName $prodProject -BackupPath $backupPath -TargetDatabase $restoreDatabase
     $restoredMigrationCount = Get-DatabaseValue -ComposeArguments $prodCompose `
       -Database $restoreDatabase -Sql 'SELECT COUNT(*) FROM "_prisma_migrations";'
@@ -388,6 +420,40 @@ DELETE FROM "User" WHERE "username" = '$bootstrapUsername';
       -Description "Removing isolated restore-drill database"
     Remove-Item -LiteralPath $backupPath -Force
     $verificationBackupPath = $null
+
+    $linuxFlag = Get-Variable -Name IsLinux -ErrorAction SilentlyContinue
+    if ($null -ne $linuxFlag -and [bool]$linuxFlag.Value) {
+      $linuxVerificationBackupDirectory = Join-Path ([IO.Path]::GetTempPath()) `
+        "tide-grader-linux-backup-$suffix"
+      New-Item -ItemType Directory -Path $linuxVerificationBackupDirectory -Force | Out-Null
+      $linuxEnvironment = @(
+        "PROJECT_ROOT=$projectRoot",
+        "ENVIRONMENT_FILE=",
+        "RELEASE_ENVIRONMENT_FILE=",
+        "PROJECT_NAME=$prodProject",
+        "BACKUP_DIR=$linuxVerificationBackupDirectory",
+        "RETENTION_DAYS=1",
+        "BACKUP_ALERT_WEBHOOK_URL="
+      )
+      $linuxBackupOutput = & env @linuxEnvironment bash "./scripts/backup.sh" | Out-String
+      if ($LASTEXITCODE -ne 0) { throw "Linux production backup helper failed." }
+      $linuxVerificationBackupPath = @(
+        $linuxBackupOutput -split "`n" | Where-Object { $_.Trim() }
+      )[-1].Trim()
+      if (-not (Test-Path -LiteralPath $linuxVerificationBackupPath -PathType Leaf)) {
+        throw "Linux production backup helper did not return a backup path."
+      }
+      & env @linuxEnvironment bash "./scripts/restore-drill.sh" $linuxVerificationBackupPath
+      if ($LASTEXITCODE -ne 0) { throw "Linux production restore drill failed." }
+      foreach ($path in @($linuxVerificationBackupPath, "$linuxVerificationBackupPath.sha256")) {
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+          Remove-Item -LiteralPath $path -Force
+        }
+      }
+      Remove-Item -LiteralPath $linuxVerificationBackupDirectory -Force
+      $linuxVerificationBackupPath = $null
+      $linuxVerificationBackupDirectory = $null
+    }
     $backendLogs = & docker @($prodCompose + @("logs", "backend")) 2>&1 | Out-String
     if ($backendLogs -match "prisma:seed|seed\.ts") {
       throw "Production startup attempted to run Seed."
@@ -400,10 +466,25 @@ finally {
   if ($verificationBackupPath -and (Test-Path -LiteralPath $verificationBackupPath)) {
     Remove-Item -LiteralPath $verificationBackupPath -Force
   }
+  if ($linuxVerificationBackupPath) {
+    foreach ($path in @($linuxVerificationBackupPath, "$linuxVerificationBackupPath.sha256")) {
+      if (Test-Path -LiteralPath $path -PathType Leaf) {
+        Remove-Item -LiteralPath $path -Force
+      }
+    }
+  }
+  if (
+    $linuxVerificationBackupDirectory -and
+    (Test-Path -LiteralPath $linuxVerificationBackupDirectory -PathType Container)
+  ) {
+    Remove-Item -LiteralPath $linuxVerificationBackupDirectory -Force -ErrorAction SilentlyContinue
+  }
   if (-not $KeepContainers) {
     if ($prodStarted) {
       Remove-VerificationStack -Project $prodProject `
-        -ComposeFiles @("compose.base.yml", "docker-compose.prod.yml")
+        -ComposeFiles @(
+          "compose.base.yml", "docker-compose.prod.yml", "docker-compose.release-build.yml"
+        )
     }
     if ($devStarted) {
       Remove-VerificationStack -Project $devProject `

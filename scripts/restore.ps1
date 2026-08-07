@@ -5,6 +5,7 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$TargetDatabase,
   [string]$EnvironmentFile = ".env.production",
+  [string]$ReleaseEnvironmentFile = "release-images.env",
   [string]$ProjectName = "tide-final-grading"
 )
 
@@ -16,14 +17,21 @@ if ($TargetDatabase -notmatch '^[A-Za-z][A-Za-z0-9_]{2,62}$') {
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $absoluteBackup = (Resolve-Path -LiteralPath $BackupPath).Path
 $composeFile = Join-Path $projectRoot "docker-compose.prod.yml"
-$composeArguments = @("compose", "-p", $ProjectName, "-f", $composeFile)
-if ($EnvironmentFile) {
-  $resolvedEnvironment = [IO.Path]::GetFullPath((Join-Path $projectRoot $EnvironmentFile))
+$composeArguments = @("compose")
+foreach ($environmentFilePath in @($EnvironmentFile, $ReleaseEnvironmentFile)) {
+  if (-not $environmentFilePath) { continue }
+  if ([IO.Path]::IsPathRooted($environmentFilePath)) {
+    $resolvedEnvironment = [IO.Path]::GetFullPath($environmentFilePath)
+  }
+  else {
+    $resolvedEnvironment = [IO.Path]::GetFullPath((Join-Path $projectRoot $environmentFilePath))
+  }
   if (-not (Test-Path -LiteralPath $resolvedEnvironment -PathType Leaf)) {
     throw "Production environment file was not found: $resolvedEnvironment"
   }
-  $composeArguments = @("compose", "--env-file", $resolvedEnvironment, "-p", $ProjectName, "-f", $composeFile)
+  $composeArguments += @("--env-file", $resolvedEnvironment)
 }
+$composeArguments += @("-p", $ProjectName, "-f", $composeFile)
 
 $containerId = (& docker @($composeArguments + @("ps", "-q", "db")) | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or -not $containerId) {

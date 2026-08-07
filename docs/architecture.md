@@ -1,6 +1,6 @@
 # 架构说明
 
-本文描述当前已实现的系统结构、Module interface、数据流和身份模型。产品入口与路线图见 [README](../README.md)，完整安全限制见 [CAPABILITY_BOUNDARIES.md](../CAPABILITY_BOUNDARIES.md)。
+本文描述当前已实现的系统结构、Module interface、数据流和身份模型。产品入口与冻结范围见 [README](../README.md)，完整安全限制见 [CAPABILITY_BOUNDARIES.md](../CAPABILITY_BOUNDARIES.md)。
 
 ## 系统上下文
 
@@ -34,7 +34,7 @@ flowchart TB
 | 学生 | Mattermost | 提交答案 |
 | 学生 | Web | 仅验证身份并提示使用课程入口 |
 
-长期方向是为教师和学生补齐 Web 自助流程，再把 Mattermost 变为可选 adapter。该方向尚未作为当前能力发布。
+`v0.2.0` 在维护模式下冻结上述路径。完整 Web 自助流程和可选 Mattermost adapter 已延期，不属于当前支持范围。
 
 ## 主要 Module
 
@@ -89,7 +89,7 @@ Backend 通过 HTTP adapter 调用 Agent；测试使用 Fake Agent 或 Mock adap
 - `App`：只负责会话状态和角色路由；
 - `LoginScreen`：登录；
 - `TeacherWorkspace`：教师审核页面；
-- `StudentWorkspace`：当前学生入口与未来学生自助页面 seam；
+- `StudentWorkspace`：当前学生身份提示页；
 - `AdminAccountPanel`：账号管理；
 - `useReviewWorkspace`：教师工作区状态与操作 interface；
 - `GradingGateway`：HTTP 和 Fake adapters 的共同 interface。

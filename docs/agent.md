@@ -20,6 +20,8 @@ ENABLE_PASCAL_EXECUTION=false
 
 ## DeepSeek 模式
 
+> 当前状态：adapter 已实现并通过结构化契约测试，但仓库没有可用的 `DEEPSEEK_API_KEY`，`v0.2.0` 封版时未执行付费真实模型评估。该模式属于未验证的尽力支持能力；只有 Mock 模式属于发布门禁已验证路径。
+
 ```dotenv
 AGENT_MODE=live
 DEEPSEEK_API_KEY=你的Key
@@ -118,6 +120,8 @@ python ./tests/run_live_model_evaluation.py
 - Variables：模型、Base URL 和可选单价。
 
 workflow 保存脱敏 JSON 摘要 30 天，不参与普通 PR 或 `main` push 门禁。
+
+没有一份成功的脱敏摘要时，不应对外宣称某个在线模型、通过率、延迟或成本已经达到生产标准。外部模型名称、价格、配额和响应行为可能独立变化。
 
 ## Pascal 执行
 

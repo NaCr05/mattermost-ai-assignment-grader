@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Mattermost AI Assignment Grader backup
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=mattermost-grader-backup.service
+
+[Install]
+WantedBy=timers.target

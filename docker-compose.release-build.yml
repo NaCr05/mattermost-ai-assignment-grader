@@ -1,0 +1,29 @@
+services:
+  backend:
+    pull_policy: build
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+
+  agent:
+    pull_policy: build
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+      target: production
+
+  frontend:
+    pull_policy: build
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        VITE_API_URL: /api
+
+  caddy:
+    pull_policy: build
+    build:
+      context: ./deploy/caddy
+      dockerfile: Dockerfile
