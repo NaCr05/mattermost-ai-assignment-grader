@@ -28,7 +28,9 @@
 | 受 Git 跟踪的 Markdown 链接 | 14 份文档通过 |
 | GitHub Actions workflow 语法 | actionlint 1.7.12 通过 |
 | Linux Bash 备份与恢复演练 | custom-format + SHA-256，通过，恢复 7 个 migration |
-| Git 历史与 Trivy Security workflow | 等待 `v0.2.0` PR 远端复验 |
+| Git 历史与 Trivy Security workflow | PR #11 的 Security 与 Full verification 均通过 |
+
+远端证据：[Full verification（2 分 46 秒）](https://github.com/NaCr05/mattermost-ai-assignment-grader/actions/runs/31163055188)、[Security](https://github.com/NaCr05/mattermost-ai-assignment-grader/actions/runs/31163055213)。
 
 ## 行为与安全断言
 
