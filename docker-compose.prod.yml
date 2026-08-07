@@ -5,13 +5,15 @@ services:
     extends:
       file: compose.base.yml
       service: db
+    restart: unless-stopped
 
   backend:
     extends:
       file: compose.base.yml
       service: backend
-    build:
-      target: production
+    image: ${BACKEND_IMAGE:?Download release-images.env from the v0.2.0 release}
+    pull_policy: missing
+    restart: unless-stopped
     environment:
       FRONTEND_ORIGIN: ${PUBLIC_ORIGIN}
       AUTH_COOKIE_SECURE: "true"
@@ -21,17 +23,17 @@ services:
     extends:
       file: compose.base.yml
       service: agent
-    build:
-      target: production
+    image: ${AGENT_IMAGE:?Download release-images.env from the v0.2.0 release}
+    pull_policy: missing
+    restart: unless-stopped
 
   frontend:
     extends:
       file: compose.base.yml
       service: frontend
-    build:
-      target: production
-      args:
-        VITE_API_URL: /api
+    image: ${FRONTEND_IMAGE:?Download release-images.env from the v0.2.0 release}
+    pull_policy: missing
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/healthz"]
       interval: 5s
@@ -40,9 +42,9 @@ services:
       start_period: 10s
 
   caddy:
-    build:
-      context: ./deploy/caddy
-      dockerfile: Dockerfile
+    image: ${CADDY_IMAGE:?Download release-images.env from the v0.2.0 release}
+    pull_policy: missing
+    restart: unless-stopped
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS}
     ports:
@@ -61,6 +63,11 @@ services:
     depends_on:
       frontend:
         condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "${LOG_MAX_SIZE:-10m}"
+        max-file: "${LOG_MAX_FILES:-5}"
 
 volumes:
   postgres_data:

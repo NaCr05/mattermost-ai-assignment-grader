@@ -4,6 +4,35 @@
 
 ## [Unreleased]
 
+维护模式下没有计划中的功能变更。
+
+## [0.2.0] - 2026-08-07
+
+### Added
+
+- 增加无默认凭据的交互式首位管理员初始化脚本及首次登录验证；
+- 增加本地启动、生产部署、Mattermost、架构、Agent、项目回顾和接手指南；
+- 增加使用匿名合成内容的教师工作台和 EvaluationAudit 截图；
+- 增加 Linux 原子备份、checksum、失败 webhook、systemd timer 和恢复演练脚本；
+- 增加 GHCR 发布 workflow，为 Backend、Agent、Frontend 和 Caddy 生成 digest、provenance、SPDX SBOM 与校验和；
+- 增加只接受 Git 跟踪目标的 Markdown 链接门禁。
+
+### Changed
+
+- README 改为简洁的产品入口和文档路由，删除仅存在于本地的演示链接；
+- 产品范围冻结为 Mattermost 发布/提交与 Web 教师工作台，项目进入安全维护模式；
+- 拆分前端会话路由、教师工作区、学生提示页、审核队列、提交卡片和样式职责；
+- 生产 Compose 改为消费 Release 的不可变镜像，不再在服务器上现场构建；
+- 生产服务增加 `unless-stopped` 自动重启和有界 JSON 日志轮转；
+- 基础镜像按 OCI digest 固定；
+- Dependabot 停止常规版本升级 PR，保留安全告警与安全更新。
+
+### Security
+
+- 明确只有 Mock 模式具有发布门禁证据；DeepSeek adapter 因没有付费验收凭据，仅作为未验证的尽力支持能力；
+- 明确 `0.1.x` 停止支持，最新 `0.2.x` 只评估严重安全、数据完整性和发布阻塞问题；
+- 正式镜像提供 SBOM、不可变 digest 和 `SHA256SUMS`，生产部署必须校验 Release 资产。
+
 ## [0.1.1] - 2026-08-06
 
 ### Added

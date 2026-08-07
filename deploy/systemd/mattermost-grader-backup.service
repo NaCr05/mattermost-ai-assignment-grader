@@ -1,0 +1,16 @@
+[Unit]
+Description=Mattermost AI Assignment Grader PostgreSQL backup
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=/etc/mattermost-ai-assignment-grader/backup.conf
+ExecStart=/usr/bin/env bash ${PROJECT_ROOT}/scripts/backup.sh
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+TimeoutStartSec=30min
+Nice=10

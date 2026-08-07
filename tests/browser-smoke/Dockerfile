@@ -7,7 +7,7 @@ WORKDIR /smoke
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY --chown=pwuser:pwuser smoke.mjs ./
+COPY --chown=pwuser:pwuser smoke.mjs fixture.mjs ./
 
 USER pwuser
 

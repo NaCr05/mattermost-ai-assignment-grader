@@ -1,0 +1,233 @@
+name: Release images
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-images-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_PREFIX: ghcr.io/nacr05/mattermost-ai-assignment-grader
+
+jobs:
+  publish:
+    name: Publish immutable images and SBOMs
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Verify release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_version="${GITHUB_REF_NAME#v}"
+          node -e '
+            const fs = require("node:fs");
+            const expected = process.argv[1];
+            for (const path of [
+              "backend/package.json",
+              "frontend/package.json",
+              "tests/browser-smoke/package.json",
+            ]) {
+              const actual = JSON.parse(fs.readFileSync(path, "utf8")).version;
+              if (actual !== expected) {
+                throw new Error(`${path} is ${actual}; expected ${expected}`);
+              }
+            }
+          ' "${expected_version}"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Prepare release assets
+        run: mkdir -p release-assets
+
+      - name: Build and publish Backend
+        id: backend
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: production
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-backend:${{ github.ref_name }}
+            ${{ env.IMAGE_PREFIX }}-backend:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.licenses=ISC
+          cache-from: type=gha,scope=release-backend
+          cache-to: type=gha,mode=max,scope=release-backend
+          provenance: mode=max
+          sbom: true
+
+      - name: Build and publish Agent
+        id: agent
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./agent
+          file: ./agent/Dockerfile
+          target: production
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-agent:${{ github.ref_name }}
+            ${{ env.IMAGE_PREFIX }}-agent:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.licenses=ISC
+          cache-from: type=gha,scope=release-agent
+          cache-to: type=gha,mode=max,scope=release-agent
+          provenance: mode=max
+          sbom: true
+
+      - name: Build and publish Frontend
+        id: frontend
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: production
+          build-args: VITE_API_URL=/api
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-frontend:${{ github.ref_name }}
+            ${{ env.IMAGE_PREFIX }}-frontend:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.licenses=ISC
+          cache-from: type=gha,scope=release-frontend
+          cache-to: type=gha,mode=max,scope=release-frontend
+          provenance: mode=max
+          sbom: true
+
+      - name: Build and publish Caddy
+        id: caddy
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./deploy/caddy
+          file: ./deploy/caddy/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-caddy:${{ github.ref_name }}
+            ${{ env.IMAGE_PREFIX }}-caddy:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.licenses=ISC
+          cache-from: type=gha,scope=release-caddy
+          cache-to: type=gha,mode=max,scope=release-caddy
+          provenance: mode=max
+          sbom: true
+
+      - name: Export Backend SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.IMAGE_PREFIX }}-backend@${{ steps.backend.outputs.digest }}
+          format: spdx-json
+          output-file: release-assets/backend.spdx.json
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Export Agent SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.IMAGE_PREFIX }}-agent@${{ steps.agent.outputs.digest }}
+          format: spdx-json
+          output-file: release-assets/agent.spdx.json
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Export Frontend SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.IMAGE_PREFIX }}-frontend@${{ steps.frontend.outputs.digest }}
+          format: spdx-json
+          output-file: release-assets/frontend.spdx.json
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Export Caddy SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.IMAGE_PREFIX }}-caddy@${{ steps.caddy.outputs.digest }}
+          format: spdx-json
+          output-file: release-assets/caddy.spdx.json
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Write immutable image manifest
+        shell: bash
+        env:
+          BACKEND_DIGEST: ${{ steps.backend.outputs.digest }}
+          AGENT_DIGEST: ${{ steps.agent.outputs.digest }}
+          FRONTEND_DIGEST: ${{ steps.frontend.outputs.digest }}
+          CADDY_DIGEST: ${{ steps.caddy.outputs.digest }}
+        run: |
+          set -euo pipefail
+          cat >release-assets/release-images.env <<EOF
+          BACKEND_IMAGE=${IMAGE_PREFIX}-backend@${BACKEND_DIGEST}
+          AGENT_IMAGE=${IMAGE_PREFIX}-agent@${AGENT_DIGEST}
+          FRONTEND_IMAGE=${IMAGE_PREFIX}-frontend@${FRONTEND_DIGEST}
+          CADDY_IMAGE=${IMAGE_PREFIX}-caddy@${CADDY_DIGEST}
+          EOF
+          jq --null-input \
+            --arg version "${GITHUB_REF_NAME}" \
+            --arg revision "${GITHUB_SHA}" \
+            --arg backend "${IMAGE_PREFIX}-backend@${BACKEND_DIGEST}" \
+            --arg agent "${IMAGE_PREFIX}-agent@${AGENT_DIGEST}" \
+            --arg frontend "${IMAGE_PREFIX}-frontend@${FRONTEND_DIGEST}" \
+            --arg caddy "${IMAGE_PREFIX}-caddy@${CADDY_DIGEST}" \
+            '{version: $version, revision: $revision, platform: "linux/amd64", images: {backend: $backend, agent: $agent, frontend: $frontend, caddy: $caddy}}' \
+            >release-assets/release-manifest.json
+          (
+            cd release-assets
+            find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' \
+              | sort | xargs sha256sum >SHA256SUMS
+          )
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ github.ref_name }}-release-assets
+          path: release-assets/
+          if-no-files-found: error
+          retention-days: 90

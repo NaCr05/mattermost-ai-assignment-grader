@@ -1,0 +1,9 @@
+PROJECT_ROOT=/opt/mattermost-ai-assignment-grader
+ENVIRONMENT_FILE=/opt/mattermost-ai-assignment-grader/.env.production
+RELEASE_ENVIRONMENT_FILE=/opt/mattermost-ai-assignment-grader/release-images.env
+PROJECT_NAME=tide-final-grading
+BACKUP_DIR=/var/backups/mattermost-ai-assignment-grader
+RETENTION_DAYS=14
+
+# 可选。失败时发送不含备份内容和凭据的 JSON 通知。
+BACKUP_ALERT_WEBHOOK_URL=

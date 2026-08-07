@@ -1,6 +1,12 @@
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "${LOG_MAX_SIZE:-10m}"
+    max-file: "${LOG_MAX_FILES:-5}"
+
 services:
   db:
-    image: postgres:15
+    image: postgres:15@sha256:6eb0add3b77c081df18aa518ce43df58fdcc40f2e6d868a6fd08038dc7acd425
     user: postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -18,11 +24,9 @@ services:
       timeout: 5s
       retries: 12
       start_period: 5s
+    logging: *default-logging
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
       AUTH_SECRET: ${AUTH_SECRET}
@@ -55,11 +59,9 @@ services:
         condition: service_healthy
       agent:
         condition: service_healthy
+    logging: *default-logging
 
   agent:
-    build:
-      context: ./agent
-      dockerfile: Dockerfile
     environment:
       AGENT_MODE: ${AGENT_MODE:-mock}
       ENABLE_PASCAL_EXECUTION: ${ENABLE_PASCAL_EXECUTION:-false}
@@ -81,11 +83,10 @@ services:
       timeout: 5s
       retries: 12
       start_period: 5s
+    logging: *default-logging
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
     depends_on:
       backend:
         condition: service_healthy
+    logging: *default-logging

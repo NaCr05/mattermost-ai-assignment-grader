@@ -1,0 +1,247 @@
+﻿@media (max-width: 1180px) {
+  .app-shell {
+    width: min(100% - 40px, 1360px);
+  }
+
+  .hero {
+    align-items: flex-start;
+  }
+
+  .hero__actions {
+    grid-template-columns: 1fr 1.35fr;
+    width: min(580px, 100%);
+  }
+
+  .hero__actions .button {
+    grid-column: 2;
+  }
+
+  .assignment-brief {
+    grid-template-columns: 1.4fr 1fr;
+  }
+
+  .analytics__content {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .completeness-summary {
+    grid-column: 1 / -1;
+  }
+
+  .filters {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .filters__search {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 860px) {
+  .app-shell {
+    width: min(100% - 28px, 1360px);
+    padding-top: 18px;
+  }
+
+  .hero,
+  .section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hero__brand {
+    gap: 22px;
+    min-width: 0;
+  }
+
+  .hero__actions {
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+
+  .assignment-brief {
+    grid-template-columns: 1fr;
+    gap: 22px;
+    padding: 26px;
+  }
+
+  .stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .analytics__content {
+    grid-template-columns: 1fr;
+  }
+
+  .completeness-summary {
+    grid-column: auto;
+  }
+
+  .filters {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .filters__search {
+    grid-column: 1 / -1;
+  }
+
+  .evaluation-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .score-box {
+    flex-direction: row;
+    justify-content: flex-start;
+    min-height: 92px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .score-box__label {
+    margin-right: auto;
+  }
+
+  .edit-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .edit-form__comment {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 580px) {
+  .app-shell {
+    width: min(100% - 20px, 1360px);
+    padding-bottom: 52px;
+  }
+
+  .brand-mark {
+    width: 46px;
+    height: 46px;
+    font-size: 21px;
+  }
+
+  .hero__subtitle {
+    display: none;
+  }
+
+  .hero__actions {
+    grid-template-columns: 1fr;
+  }
+
+  .hero__actions .button {
+    grid-column: auto;
+  }
+
+  .account-admin__panel {
+    right: auto;
+    left: 0;
+    width: calc(100vw - 40px);
+  }
+
+  .account-list li,
+  .account-list form {
+    display: grid;
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .assignment-brief {
+    padding: 22px 19px;
+  }
+
+  .assignment-brief dl,
+  .stats,
+  .analytics__metrics,
+  .filters,
+  .dimension-grid,
+  .feedback-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .assignment-flow {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .assignment-flow li:not(:last-child)::after {
+    top: 26px;
+    right: auto;
+    bottom: -10px;
+    left: 13px;
+    width: 1px;
+    height: auto;
+  }
+
+  .analytics {
+    padding: 20px 16px;
+  }
+
+  .analytics__heading,
+  .audit-panel__heading,
+  .audit-timeline__title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .filters__search {
+    grid-column: auto;
+  }
+
+  .submission-list {
+    margin-left: 0;
+  }
+
+  .submission-list::before,
+  .submission-card__node {
+    display: none;
+  }
+
+  .submission-card__student {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 15px;
+  }
+
+  .status {
+    margin-left: auto;
+  }
+
+  .answer-block,
+  .evaluation-content {
+    padding: 17px 15px;
+  }
+
+  .score-box {
+    flex-wrap: wrap;
+    padding: 20px 15px;
+  }
+
+  .score-box__label {
+    width: 100%;
+  }
+
+  .edit-form {
+    grid-template-columns: 1fr;
+  }
+
+  .edit-form__comment {
+    grid-column: 1;
+  }
+
+  .card-actions .button {
+    flex: 1 1 calc(50% - 9px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

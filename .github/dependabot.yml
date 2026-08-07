@@ -1,7 +1,9 @@
 version: 2
+# 维护模式：停止常规版本升级 PR。Dependabot alerts 与安全更新保持启用。
 updates:
   - package-ecosystem: npm
     directory: /backend
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
     groups:
@@ -10,6 +12,7 @@ updates:
 
   - package-ecosystem: npm
     directory: /frontend
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
     groups:
@@ -18,6 +21,7 @@ updates:
 
   - package-ecosystem: npm
     directory: /tests/browser-smoke
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
     groups:
@@ -26,6 +30,7 @@ updates:
 
   - package-ecosystem: pip
     directory: /agent
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
     groups:
@@ -34,6 +39,7 @@ updates:
 
   - package-ecosystem: docker
     directory: /backend
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
     ignore:
@@ -44,6 +50,7 @@ updates:
 
   - package-ecosystem: docker
     directory: /frontend
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
     ignore:
@@ -52,20 +59,24 @@ updates:
 
   - package-ecosystem: docker
     directory: /agent
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
 
   - package-ecosystem: docker
     directory: /deploy/caddy
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
 
   - package-ecosystem: docker
     directory: /tests/browser-smoke
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
 
   - package-ecosystem: github-actions
     directory: /
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
