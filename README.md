@@ -1,198 +1,190 @@
 # Mattermost AI Assignment Grader
 
-> 一个可由课程团队自行部署的 Mattermost AI 辅助作业评估系统。
+**English** | [简体中文](README.zh-CN.md)
 
-> **项目状态：维护模式。** `v0.2.0` 冻结当前产品范围；近期不开发新功能，只评估严重安全、数据完整性和发布阻塞问题。支持边界见 [SECURITY.md](SECURITY.md)。
+> A self-hosted, AI-assisted assignment grading platform for course teams using Mattermost.
+
+> **Maintenance mode.** `v0.2.0` freezes the current product scope. No new features are planned in the near term; only severe security, data-integrity, and release-blocking issues are considered. See [SECURITY.md](SECURITY.md).
 
 [![CI](https://github.com/NaCr05/mattermost-ai-assignment-grader/actions/workflows/ci.yml/badge.svg)](https://github.com/NaCr05/mattermost-ai-assignment-grader/actions/workflows/ci.yml)
 [![Security](https://github.com/NaCr05/mattermost-ai-assignment-grader/actions/workflows/security.yml/badge.svg)](https://github.com/NaCr05/mattermost-ai-assignment-grader/actions/workflows/security.yml)
 [![Release](https://img.shields.io/github/v/release/NaCr05/mattermost-ai-assignment-grader)](https://github.com/NaCr05/mattermost-ai-assignment-grader/releases/latest)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
 
-Mattermost AI Assignment Grader 把学生提交、AI 结构化初评和教师最终审核连接成一条可追踪的工作流。当前版本使用 Mattermost 完成作业发布、学生提交和汇总，教师在 Web 工作台中确认、修改或重新评估；AI 只提供辅助意见，最终结论始终由教师负责。
+Connect student submissions, structured AI feedback, and teacher review in one traceable workflow. Teachers publish assignments through Mattermost, students submit there, and teachers confirm, modify, or regrade evaluations in the Web workspace. AI provides assistance; teachers own the final judgment.
 
-![教师评估工作台，使用匿名合成数据](assets/readme/teacher-workspace.png)
+![Teacher review workspace with anonymous synthetic data](assets/readme/teacher-workspace.png)
 
-> 截图只使用匿名合成内容，不包含 Seed、课程数据集或真实用户信息。
+> Screenshots contain anonymous synthetic content only, with no seed datasets, course datasets, or real user information. The application screenshots retain the existing Chinese UI.
 
-## 30 秒了解项目
+## Understand the project in 30 seconds
 
-| 问题 | 当前答案 |
+| Question | Current answer |
 |---|---|
-| 谁使用 | 自行部署平台的课程团队、教师和学生 |
-| 解决什么 | 把作业提交、AI 初评、教师复核和审计记录放在同一流程中 |
-| 当前入口 | Mattermost 负责发布与提交，Web 负责教师审核和账号管理 |
-| 如何部署 | 本地开发或单台服务器 Docker Compose |
-| AI 模式 | 已验证的离线 Mock；另有未完成正式验收的 DeepSeek adapter |
-| 安全边界 | Pascal 执行默认关闭；AI 结果不能替代教师判断 |
+| Who uses it? | Course teams deploying their own platform, teachers, and students |
+| What does it solve? | Submission, AI feedback, teacher review, and audit history in one workflow |
+| Where do users start? | Mattermost for publishing and submission; Web for teacher review and accounts |
+| How is it deployed? | Local development or single-server Docker Compose |
+| Which AI modes exist? | Verified offline Mock; a DeepSeek adapter without formal live-model acceptance evidence |
+| What are the boundaries? | Pascal execution is disabled by default; AI does not replace teacher judgment |
 
-### 当前产品范围
+### Current product scope
 
-`v0.2.0` 冻结为 **Mattermost 发布/提交工作流 + Web 教师工作台**：
+`v0.2.0` is frozen as **Mattermost publishing/submission + a teacher Web workspace**:
 
-- 教师通过 Mattermost 发布、汇总，也可在 Web 中审核评估和管理账号；
-- 学生通过 Mattermost 提交答案；
-- Web 学生入口只验证身份并提示返回课程入口。
+- Teachers publish and summarize through Mattermost and can review evaluations and manage accounts on the Web.
+- Students submit answers through Mattermost.
+- The student Web entry verifies identity and directs the student back to the course entry point.
 
-教师 Web 发布、完整学生 Web 流程和“可选 Mattermost adapter”不属于本维护版本，也没有承诺交付时间。
+Teacher Web publishing, a full student Web workflow, and an optional Mattermost adapter are deferred, with no delivery commitment in this maintenance release.
 
-## 5 分钟本地启动
+## Architecture overview
 
-### 环境
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/overview.en.dark.png">
+  <img src="assets/readme/overview.en.png" alt="Mattermost and the teacher Web workspace call Backend, which uses PostgreSQL and Agent. DeepSeek requires explicit live mode.">
+</picture>
 
-- Windows 10/11；
-- Docker Desktop；
-- PowerShell 5.1 或 PowerShell 7。
+[View full-size diagram](assets/readme/overview.en.png)
 
-首次启动会从 `.env.example` 创建本地 `.env`，自动生成数据库密码、`AUTH_SECRET` 和一次性 `BOOTSTRAP_TOKEN`。不会加载 Seed 或课程数据集。
+| Directory | Responsibility |
+|---|---|
+| `backend/` | Express adapters, authentication, Grading Module, and Prisma |
+| `frontend/` | React sessions, teacher workspace, and student identity notice |
+| `agent/` | FastAPI Evaluation Module with Mock and DeepSeek adapters |
+| `scripts/` | Startup, bootstrap, verification, backup, and restore |
+| `tests/` | API, concurrent state updates, browser smoke, and synthetic acceptance |
+| `deploy/` | Caddy HTTPS entry for a single server |
+
+The overview shows application relationships, not production port exposure. See the [architecture guide](docs/architecture.md) for interfaces, identity, data flow, and HTTP routes.
+
+## Local quick start
+
+### Requirements
+
+- Windows 10/11
+- Docker Desktop
+- PowerShell 5.1 or PowerShell 7
+
+The first startup creates a local `.env` from `.env.example` and generates the database password, `AUTH_SECRET`, and a one-time `BOOTSTRAP_TOKEN`. It does not load seed or course datasets.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-demo.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-admin.ps1
 ```
 
-第二个命令会交互式询问管理员用户名、显示名称和密码；密码至少 12 个字符。脚本不会提供默认凭据，也不会显示 Bootstrap Token 或密码。
+The second command prompts for the administrator username, display name, and password. Passwords must contain at least 12 characters. No default credentials are supplied, and the script does not display the Bootstrap Token or password.
 
-完成后打开：
+Then open:
 
-- Web 工作台：`http://localhost:5173`
-- Backend 健康检查：`http://localhost:3001/health`
-- Agent 健康检查：`http://localhost:8000/health`
+- Web workspace: `http://localhost:5173`
+- Backend health: `http://localhost:3001/health`
+- Agent health: `http://localhost:8000/health`
 
-默认 `AGENT_MODE=mock`，适合无网络、无 API Key 的本地验证。当前完整的作业发布与学生提交流程还需要配置 Mattermost，或直接调用受保护的 HTTP 接口。
+The default `AGENT_MODE=mock` supports local verification without a network connection or API key. The complete publishing and submission workflow still requires Mattermost configuration, or direct use of the protected HTTP APIs.
 
-Linux、手动 Compose、已有 `.env` 和常见启动问题见 [本地启动指南](docs/getting-started.md)。
+For Linux, manual Compose setup, existing `.env` files, and troubleshooting, see [Getting started](docs/getting-started.md).
 
-## 一次评估如何流转
+## From submission to teacher review
 
-```mermaid
-flowchart LR
-    T["教师发布作业"] --> A["Backend 保存 Assignment"]
-    S["学生提交答案"] --> B["Backend 保存 Submission"]
-    B --> G["Agent 生成结构化 Evaluation"]
-    G --> W["Web 教师工作台"]
-    W --> R{"教师审核"}
-    R --> C["确认"]
-    R --> M["修改"]
-    R --> RG["重新评估"]
-    C --> H["EvaluationAudit 历史"]
-    M --> H
-    RG --> H
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/review.en.dark.png">
+  <img src="assets/readme/review.en.png" alt="Save a student submission before calling Agent, persist the evaluation and audit, then accept versioned teacher review.">
+</picture>
 
-系统保证：
+[View full-size diagram](assets/readme/review.en.png)
 
-- Agent 暂时失败时不删除学生提交；
-- 确认、修改和重评都携带 Evaluation 版本，过期写入返回冲突；
-- EvaluationAudit 保存不可变的评估历史；
-- 公开 DTO 不返回 Agent 原始输出、Token、成本或内部字段；
-- Web 身份来自服务端会话，不接受客户端提供的用户 ID 作为权限依据。
+The diagram starts with a published assignment and shows a first submission, successful initial evaluation, and teacher confirmation or modification. Regrading calls the Agent again. Agent failures retain the submission; version conflicts reject stale changes. With the direct HTTP API, saving a submission and requesting evaluation are separate requests.
 
-![评估审计时间线，使用匿名合成数据](assets/readme/evaluation-audit.png)
+The system's implemented safeguards include:
 
-## 核心能力
+- A temporary Agent failure does not delete the student's submission.
+- Confirm, modify, and regrade requests carry the current Evaluation version; stale writes return a conflict.
+- EvaluationAudit stores immutable evaluation history.
+- Public DTOs exclude raw Agent output, token usage, cost, and internal fields.
+- Web identity comes from server-side sessions; a client-supplied user ID is not an authorization source.
 
-- 教师发布作业、查看提交汇总和审核状态；
-- 学生提交文本、代码片段或伪代码答案；
-- Agent 生成分数、等级、完整性、正确性、问题和修改建议；
-- 教师确认、修改或重新评估；
-- 作业搜索、提交搜索、状态与等级筛选、排序和统计；
-- 平台账号创建、密码重置、禁用和全会话撤销；
-- JSON 结构化日志、请求 ID、健康检查和 Prometheus 指标；
-- 已验证的 Mock 与尽力支持的 DeepSeek adapter；
-- 单机 Compose 生产部署、HTTPS、备份与恢复；
-- CI、Security、Dependabot 和真实 Chromium smoke。
+![Evaluation audit timeline with anonymous synthetic data](assets/readme/evaluation-audit.png)
 
-## 架构概览
+## Core capabilities
 
-```mermaid
-flowchart TB
-    MM["Mattermost Slash Command"] --> BE["Express HTTP adapters"]
-    WEB["React Web Workspace"] --> BE
-    BE --> GM["Grading Module"]
-    BE --> AUTH["Auth Module"]
-    GM --> PG["PostgreSQL / Prisma"]
-    AUTH --> PG
-    GM --> AG["FastAPI Evaluation Module"]
-    AG --> MOCK["Mock adapter"]
-    AG --> LIVE["DeepSeek adapter"]
-```
+- Teacher assignment publishing, submission summaries, and review status
+- Student answers as text, code snippets, or pseudocode
+- Structured scores, grades, completeness, correctness, problems, and suggestions
+- Teacher confirmation, modification, and regrading
+- Assignment/submission search, status and grade filters, sorting, and statistics
+- Account creation, password resets, disabling users, and revoking all sessions
+- Structured JSON logs, request IDs, health checks, and Prometheus metrics
+- Verified Mock behavior and a best-effort DeepSeek adapter
+- Single-server Compose deployment, HTTPS, backup, and restore
+- CI, Security, Dependabot, and real Chromium smoke tests
 
-| 目录 | 职责 |
-|---|---|
-| `backend/` | Express adapters、认证、Grading Module、Prisma |
-| `frontend/` | React 会话入口、教师工作台和学生身份提示页 |
-| `agent/` | FastAPI Evaluation Module、Mock/DeepSeek adapter |
-| `scripts/` | 启动、初始化、验证、备份和恢复 |
-| `tests/` | API、状态并发、浏览器 smoke 和合成验收 |
-| `deploy/` | 单服务器 Caddy HTTPS 入口 |
+## Deployment
 
-更完整的数据流、模块 interface、身份模型和 HTTP 路由见 [架构说明](docs/architecture.md)。
-
-## 部署方式
-
-| 模式 | 适用场景 | 入口与隔离 |
+| Mode | Use | Entry and isolation |
 |---|---|---|
-| 本地开发 | 功能开发、Mock 验收 | 服务只绑定 `127.0.0.1` |
-| 单机生产 Compose | 近期生产部署 | Caddy 是唯一公开入口；数据库、Backend、Agent 不映射端口 |
+| Local development | Development and Mock acceptance | Services bind to `127.0.0.1` |
+| Single-server production Compose | Current production deployment model | Only Caddy is publicly exposed; database, Backend, and Agent publish no host ports |
 
-生产启动只执行 `prisma migrate deploy`，不会执行 Seed。所有生产容器使用非 root 用户，Pascal 执行保持默认关闭。正式 Release 提供按 digest 固定的 `release-images.env`、SBOM 和校验和；生产 Compose 不在服务器上现场构建应用镜像。
+Production startup runs `prisma migrate deploy`, without seeding data. All production containers run as non-root users, and Pascal execution remains disabled by default. Formal releases provide digest-pinned `release-images.env`, SBOMs, and checksums; production Compose does not build application images on the server.
 
-部署、HTTPS、初始化、备份和恢复见 [生产部署指南](docs/deployment.md)。
+See [Production deployment](docs/deployment.md) for HTTPS, bootstrap, backup, and restore.
 
-## Agent 与能力边界
+## Agent modes and capability boundaries
 
-- Mock 输出稳定但只是规则系统，不具备任意题型的通用语义理解；
-- DeepSeek adapter 需要显式 API Key，并通过 Pydantic 结构校验和一次失败重试；当前没有付费真实模型验收证据，因此只作为未验证的尽力支持能力；
-- 在线模型仍可能受网络、限流、版本和随机性影响；
-- Pascal 专项执行器不是安全沙箱，公开部署必须保持关闭；
-- AI 结果仅供辅助，教师负责最终结论。
+- Mock is deterministic and rule-based. It does not provide general semantic understanding across arbitrary assignment types.
+- DeepSeek requires an explicit API key and uses Pydantic output validation with one retry. There is no paid live-model acceptance evidence; this adapter remains unverified, best-effort support.
+- Live behavior can vary with network conditions, rate limits, model versions, and randomness.
+- The Pascal-specific executor is not a security sandbox and must remain disabled in public deployments.
+- AI output is advisory; teachers remain responsible for the final assessment.
 
-完整风险说明以 [CAPABILITY_BOUNDARIES.md](CAPABILITY_BOUNDARIES.md) 为准；模型模式、指标、成本和付费合成评估见 [Agent 运行指南](docs/agent.md)。
+[CAPABILITY_BOUNDARIES.md](CAPABILITY_BOUNDARIES.md) is authoritative for limitations. See the [Agent guide](docs/agent.md) for mode selection, metrics, costs, and explicitly paid synthetic evaluation.
 
-## 验证
+## Verification
 
-提交或发布前在仓库根目录运行统一门禁：
+Before a commit or release, run the unified gate from the repository root:
 
 ```powershell
 ./scripts/verify.ps1
 ```
 
-它验证 Backend、Frontend、Agent、PostgreSQL、真实 Chromium、空库 migration、生产静态入口、端口隔离、非 root 身份、重启与日志策略、Pascal 默认关闭、依赖审计、文档链接以及备份恢复。Linux CI 还会执行生产 Bash 备份和恢复演练。它不执行 Seed，也不读取或整理课程数据集。
+It checks Backend, Frontend, Agent, PostgreSQL, real Chromium, empty-database migrations, the production static entry, port isolation, non-root users, restart/log policies, disabled Pascal execution, dependency audits, documentation links, and backup/restore. Linux CI also exercises production Bash backup and restore. The gate does not seed, read, or reorganize course datasets.
 
-最新人工可读证据见 [tests/TEST_RESULTS.md](tests/TEST_RESULTS.md)。贡献者的局部测试和 PR 要求见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+[tests/TEST_RESULTS.md](tests/TEST_RESULTS.md) records the human-readable validation from 2026-08-07. Use the CI and Security workflows above for current status: historical passes do not imply that current dependency scans pass. See [CONTRIBUTING.md](CONTRIBUTING.md) for focused tests and PR requirements.
 
-## 文档导航
+## Documentation
 
-| 目标 | 文档 |
+Most detailed guides currently use Simplified Chinese.
+
+| Goal | Guide |
 |---|---|
-| 第一次在本地运行 | [docs/getting-started.md](docs/getting-started.md) |
-| 配置 Mattermost 与 `/ds` | [docs/mattermost.md](docs/mattermost.md) |
-| 理解模块、数据流和接口 | [docs/architecture.md](docs/architecture.md) |
-| 配置 Agent、指标和真实模型评估 | [docs/agent.md](docs/agent.md) |
-| 单机生产部署与恢复 | [docs/deployment.md](docs/deployment.md) |
-| 两分钟接手项目 | [docs/project-onboarding.md](docs/project-onboarding.md) |
-| 查看项目回顾和剩余风险 | [docs/project-retrospective.md](docs/project-retrospective.md) |
-| 查看能力边界 | [CAPABILITY_BOUNDARIES.md](CAPABILITY_BOUNDARIES.md) |
-| 查看版本变化 | [CHANGELOG.md](CHANGELOG.md) |
+| Run locally | [Getting started](docs/getting-started.md) |
+| Configure Mattermost and `/ds` | [Mattermost](docs/mattermost.md) |
+| Understand modules, data flow, and interfaces | [Architecture](docs/architecture.md) |
+| Configure the Agent and live-model evaluation | [Agent](docs/agent.md) |
+| Deploy and restore a single server | [Deployment](docs/deployment.md) |
+| Take over the project | [Onboarding](docs/project-onboarding.md) |
+| Review outcomes and remaining risks | [Retrospective](docs/project-retrospective.md) |
+| Check capability boundaries | [Capability boundaries](CAPABILITY_BOUNDARIES.md) |
+| View changes | [Changelog](CHANGELOG.md) |
 
-## 维护状态与冻结范围
+## Maintenance status and frozen scope
 
-当前范围包括 Grading Module、Agent seam、教师 Web 审核、账号与会话安全、单机生产 Compose、不可变 Release 镜像和统一验证。以下内容明确延期，不作为 `v0.2.0` 缺陷：
+The supported scope includes the Grading Module, Agent interface, teacher Web review, account/session security, single-server production Compose, immutable release images, and unified verification. The following are explicitly deferred and are not `v0.2.0` defects:
 
-- 教师 Web 作业发布与管理；
-- 学生 Web 作业列表、提交和反馈；
-- Mattermost 从当前工作流入口变为可选 adapter；
-- 多节点 Backend、共享限速和高可用数据库；
-- 任意不可信代码的安全执行。
+- Teacher Web assignment publishing and management
+- Student Web assignment lists, submission, and feedback
+- Making Mattermost an optional adapter
+- Multiple Backend instances, shared rate limiting, and a highly available database
+- Safe execution of arbitrary untrusted code
 
-仓库保持可读和可部署，但不接受功能路线图承诺。安全报告与版本支持状态以 [SECURITY.md](SECURITY.md) 为准。
+The repository remains readable and deployable, without a feature-roadmap commitment. [SECURITY.md](SECURITY.md) defines vulnerability reporting and version support.
 
-## 开源与安全
+## Open source and security
 
-- 许可证：[ISC License](LICENSE)
-- 贡献方式：[CONTRIBUTING.md](CONTRIBUTING.md)
-- 私密漏洞报告：[SECURITY.md](SECURITY.md)
-- 第三方软件与素材：[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+- License: [ISC](LICENSE)
+- Contributions: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Private vulnerability reports: [SECURITY.md](SECURITY.md)
+- Third-party software and assets: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
-请勿提交 `.env`、API Key、Token、Cookie、真实课程名单、学生答案或内部地址。
+Do not commit `.env`, API keys, tokens, cookies, real course rosters, student answers, or internal addresses.
