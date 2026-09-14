@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "作业评估系统 · 架构概览",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "animation": "none",
+    "viewBox": [
+      1160,
+      720
+    ],
+    "legend": {
+      "mode": "hidden"
+    },
+    "repository": {
+      "url": "https://github.com/NaCr05/mattermost-ai-assignment-grader",
+      "provider": "github",
+      "revision": "dd417057e1a0c85e9c82b503a9bba860226addf1"
+    }
+  },
+  "components": [
+    {
+      "id": "mattermost",
+      "type": "external",
+      "label": "Mattermost",
+      "sublabel": "发布 · 提交 · 汇总",
+      "pos": [
+        40,
+        90
+      ],
+      "size": [
+        230,
+        105
+      ],
+      "sources": [
+        {
+          "path": "backend/src/mattermost/http-adapter.ts"
+        }
+      ]
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "教师 Web 工作台",
+      "sublabel": "复核 · 账号 · 历史",
+      "pos": [
+        40,
+        430
+      ],
+      "size": [
+        230,
+        105
+      ],
+      "sources": [
+        {
+          "path": "frontend/src/workspace/TeacherWorkspace.tsx"
+        }
+      ]
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "Express Backend",
+      "sublabel": "认证 + 评分模块",
+      "pos": [
+        430,
+        260
+      ],
+      "size": [
+        260,
+        110
+      ],
+      "sources": [
+        {
+          "path": "backend/src/app.ts"
+        }
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "FastAPI Agent",
+      "sublabel": "评估模块 · 默认 Mock",
+      "pos": [
+        860,
+        260
+      ],
+      "size": [
+        260,
+        110
+      ],
+      "sources": [
+        {
+          "path": "agent/evaluation_module.py"
+        }
+      ]
+    },
+    {
+      "id": "database",
+      "type": "database",
+      "label": "PostgreSQL / Prisma",
+      "sublabel": "提交 · 版本 · 审计",
+      "pos": [
+        430,
+        540
+      ],
+      "size": [
+        260,
+        105
+      ],
+      "sources": [
+        {
+          "path": "backend/prisma/schema.prisma"
+        }
+      ]
+    },
+    {
+      "id": "deepseek",
+      "type": "cloud",
+      "label": "DeepSeek API",
+      "sublabel": "在线模式 · 未完成正式验收",
+      "pos": [
+        860,
+        540
+      ],
+      "size": [
+        260,
+        105
+      ],
+      "sources": [
+        {
+          "path": "agent/providers.py"
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "course-entry",
+      "from": "mattermost",
+      "to": "backend",
+      "label": "命令与交互回调"
+    },
+    {
+      "id": "teacher-review",
+      "from": "web",
+      "to": "backend",
+      "label": "会话 + CSRF"
+    },
+    {
+      "id": "request-evaluation",
+      "from": "backend",
+      "to": "agent",
+      "label": "POST /evaluate"
+    },
+    {
+      "id": "persist-records",
+      "from": "backend",
+      "to": "database",
+      "label": "通过 Prisma 读写",
+      "labelAt": [
+        560,
+        450
+      ]
+    },
+    {
+      "id": "live-provider",
+      "from": "agent",
+      "to": "deepseek",
+      "label": "显式在线模式 + API Key",
+      "variant": "dashed",
+      "labelAt": [
+        990,
+        450
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "当前产品范围",
+      "items": [
+        "通过 Mattermost 发布作业和提交答案。",
+        "Web 工作台支持教师复核与账号管理。"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "明确辅助评估的边界",
+      "items": [
+        "Mock 基于规则；教师负责最终判断。",
+        "Pascal 执行默认关闭；没有通用安全沙箱。"
+      ]
+    }
+  ]
+}

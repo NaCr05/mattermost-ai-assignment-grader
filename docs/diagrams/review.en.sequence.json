@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Assignment Grader · Submission to review",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "animation": "none",
+    "column_fit": "spread",
+    "viewBox": [
+      1080,
+      540
+    ],
+    "legend": {
+      "mode": "hidden"
+    }
+  },
+  "participants": [
+    {
+      "id": "mattermost",
+      "type": "external",
+      "label": "Mattermost",
+      "sublabel": "Student entry"
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "Backend",
+      "sublabel": "Auth + grading"
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "Agent",
+      "sublabel": "Structured report"
+    },
+    {
+      "id": "database",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "Current + history"
+    },
+    {
+      "id": "teacher",
+      "type": "frontend",
+      "label": "Teacher Web",
+      "sublabel": "Final review"
+    }
+  ],
+  "messages": [
+    {
+      "id": "step-1",
+      "from": "mattermost",
+      "to": "backend",
+      "y": 160,
+      "label": "Submit answer",
+      "variant": "default"
+    },
+    {
+      "id": "step-2",
+      "from": "backend",
+      "to": "database",
+      "y": 190,
+      "label": "Persist Submission first",
+      "variant": "default"
+    },
+    {
+      "id": "step-3",
+      "from": "backend",
+      "to": "agent",
+      "y": 220,
+      "label": "POST /evaluate",
+      "variant": "emphasis"
+    },
+    {
+      "id": "step-4",
+      "from": "agent",
+      "to": "backend",
+      "y": 250,
+      "label": "Validated report",
+      "variant": "return"
+    },
+    {
+      "id": "step-5",
+      "from": "backend",
+      "to": "database",
+      "y": 280,
+      "label": "Save Evaluation + audit",
+      "variant": "default"
+    },
+    {
+      "id": "step-6",
+      "from": "teacher",
+      "to": "backend",
+      "y": 310,
+      "label": "Load review queue",
+      "variant": "default"
+    },
+    {
+      "id": "step-7",
+      "from": "backend",
+      "to": "teacher",
+      "y": 340,
+      "label": "Public DTO + version",
+      "variant": "return"
+    },
+    {
+      "id": "step-8",
+      "from": "teacher",
+      "to": "backend",
+      "y": 370,
+      "label": "Confirm / modify + version",
+      "variant": "emphasis"
+    },
+    {
+      "id": "step-9",
+      "from": "backend",
+      "to": "database",
+      "y": 400,
+      "label": "Atomic update + audit",
+      "variant": "default"
+    },
+    {
+      "id": "step-10",
+      "from": "backend",
+      "to": "teacher",
+      "y": 430,
+      "label": "Result or 409 conflict",
+      "variant": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Successful initial evaluation shown",
+      "items": [
+        "An Agent failure keeps the saved submission for recovery.",
+        "Confirm and modify write versions and audit snapshots."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Regrade follows a separate branch",
+      "items": [
+        "A teacher regrade request calls the Agent again.",
+        "Version conflicts reject stale changes instead of overwriting."
+      ]
+    }
+  ]
+}

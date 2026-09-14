@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Assignment Grader · System overview",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "animation": "none",
+    "viewBox": [
+      1160,
+      720
+    ],
+    "legend": {
+      "mode": "hidden"
+    },
+    "repository": {
+      "url": "https://github.com/NaCr05/mattermost-ai-assignment-grader",
+      "provider": "github",
+      "revision": "dd417057e1a0c85e9c82b503a9bba860226addf1"
+    }
+  },
+  "components": [
+    {
+      "id": "mattermost",
+      "type": "external",
+      "label": "Mattermost",
+      "sublabel": "Publish · submit · summarize",
+      "pos": [
+        40,
+        90
+      ],
+      "size": [
+        230,
+        105
+      ],
+      "sources": [
+        {
+          "path": "backend/src/mattermost/http-adapter.ts"
+        }
+      ]
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "Teacher workspace",
+      "sublabel": "Review · accounts · history",
+      "pos": [
+        40,
+        430
+      ],
+      "size": [
+        230,
+        105
+      ],
+      "sources": [
+        {
+          "path": "frontend/src/workspace/TeacherWorkspace.tsx"
+        }
+      ]
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "Express Backend",
+      "sublabel": "Auth + Grading Module",
+      "pos": [
+        430,
+        260
+      ],
+      "size": [
+        260,
+        110
+      ],
+      "sources": [
+        {
+          "path": "backend/src/app.ts"
+        }
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "FastAPI Agent",
+      "sublabel": "Evaluation Module · Mock default",
+      "pos": [
+        860,
+        260
+      ],
+      "size": [
+        260,
+        110
+      ],
+      "sources": [
+        {
+          "path": "agent/evaluation_module.py"
+        }
+      ]
+    },
+    {
+      "id": "database",
+      "type": "database",
+      "label": "PostgreSQL / Prisma",
+      "sublabel": "Submissions · versions · audits",
+      "pos": [
+        430,
+        540
+      ],
+      "size": [
+        260,
+        105
+      ],
+      "sources": [
+        {
+          "path": "backend/prisma/schema.prisma"
+        }
+      ]
+    },
+    {
+      "id": "deepseek",
+      "type": "cloud",
+      "label": "DeepSeek API",
+      "sublabel": "Live mode · not acceptance-tested",
+      "pos": [
+        860,
+        540
+      ],
+      "size": [
+        260,
+        105
+      ],
+      "sources": [
+        {
+          "path": "agent/providers.py"
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "course-entry",
+      "from": "mattermost",
+      "to": "backend",
+      "label": "Commands + actions"
+    },
+    {
+      "id": "teacher-review",
+      "from": "web",
+      "to": "backend",
+      "label": "Session + CSRF"
+    },
+    {
+      "id": "request-evaluation",
+      "from": "backend",
+      "to": "agent",
+      "label": "POST /evaluate"
+    },
+    {
+      "id": "persist-records",
+      "from": "backend",
+      "to": "database",
+      "label": "Read / write via Prisma",
+      "labelAt": [
+        560,
+        450
+      ]
+    },
+    {
+      "id": "live-provider",
+      "from": "agent",
+      "to": "deepseek",
+      "label": "Explicit live mode + API key",
+      "variant": "dashed",
+      "labelAt": [
+        990,
+        450
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Current product scope",
+      "items": [
+        "Mattermost owns publishing and student submission.",
+        "The Web workspace supports teacher review and accounts."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Assistance with clear limits",
+      "items": [
+        "Mock is rule-based; the teacher owns the final judgment.",
+        "Pascal execution is disabled by default; no general sandbox."
+      ]
+    }
+  ]
+}

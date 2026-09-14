@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "作业评估系统 · 从提交到复核",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "animation": "none",
+    "column_fit": "spread",
+    "viewBox": [
+      1080,
+      540
+    ],
+    "legend": {
+      "mode": "hidden"
+    }
+  },
+  "participants": [
+    {
+      "id": "mattermost",
+      "type": "external",
+      "label": "Mattermost",
+      "sublabel": "学生入口"
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "Backend",
+      "sublabel": "认证 + 评分"
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "Agent",
+      "sublabel": "结构化报告"
+    },
+    {
+      "id": "database",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "当前值 + 历史"
+    },
+    {
+      "id": "teacher",
+      "type": "frontend",
+      "label": "教师 Web",
+      "sublabel": "最终复核"
+    }
+  ],
+  "messages": [
+    {
+      "id": "step-1",
+      "from": "mattermost",
+      "to": "backend",
+      "y": 160,
+      "label": "提交答案",
+      "variant": "default"
+    },
+    {
+      "id": "step-2",
+      "from": "backend",
+      "to": "database",
+      "y": 190,
+      "label": "先保存 Submission",
+      "variant": "default"
+    },
+    {
+      "id": "step-3",
+      "from": "backend",
+      "to": "agent",
+      "y": 220,
+      "label": "POST /evaluate",
+      "variant": "emphasis"
+    },
+    {
+      "id": "step-4",
+      "from": "agent",
+      "to": "backend",
+      "y": 250,
+      "label": "已校验的报告",
+      "variant": "return"
+    },
+    {
+      "id": "step-5",
+      "from": "backend",
+      "to": "database",
+      "y": 280,
+      "label": "保存 Evaluation + 审计",
+      "variant": "default"
+    },
+    {
+      "id": "step-6",
+      "from": "teacher",
+      "to": "backend",
+      "y": 310,
+      "label": "读取待审核队列",
+      "variant": "default"
+    },
+    {
+      "id": "step-7",
+      "from": "backend",
+      "to": "teacher",
+      "y": 340,
+      "label": "公开 DTO + 版本",
+      "variant": "return"
+    },
+    {
+      "id": "step-8",
+      "from": "teacher",
+      "to": "backend",
+      "y": 370,
+      "label": "确认 / 修改 + 版本",
+      "variant": "emphasis"
+    },
+    {
+      "id": "step-9",
+      "from": "backend",
+      "to": "database",
+      "y": 400,
+      "label": "原子更新 + 追加审计",
+      "variant": "default"
+    },
+    {
+      "id": "step-10",
+      "from": "backend",
+      "to": "teacher",
+      "y": 430,
+      "label": "结果或 409 版本冲突",
+      "variant": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "图示初评成功路径",
+      "items": [
+        "Agent 失败时保留已保存的学生提交。",
+        "确认与修改会写入版本和审计快照。"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "重评走独立分支",
+      "items": [
+        "教师请求重评时会再次调用 Agent。",
+        "版本冲突拒绝过期修改，防止静默覆盖。"
+      ]
+    }
+  ]
+}
